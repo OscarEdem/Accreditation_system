@@ -1,0 +1,47 @@
+API Contract Spec
+
+1. Applications API (/api/v1/applications)
+
+* POST / - Create Application
+  Request Body:
+  {
+    "user_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "category": "A",
+    "photo_url": "https://s3.amazonaws.com/bucket/photo.jpg",
+    "dob": "1990-01-01",
+    "gender": "male"
+  }
+  Response (201 Created):
+  {
+    "user_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "category": "A",
+    "id": "123e4567-e89b-12d3-a456-426614174000",
+    "status": "pending",
+    "submitted_at": "2023-10-27T10:00:00Z",
+    "created_at": "2023-10-27T10:00:00Z"
+  }
+
+* GET / - List Applications
+  Response (200 OK): Array of Application objects.
+
+* GET /{application_id} - Get Application Details
+  Response (200 OK): Single Application object.
+
+
+2. Participants API (/api/v1/participants)
+
+* POST / - Register Participant
+  Request Body:
+  {
+    "application_id": "123e4567-e89b-12d3-a456-426614174000",
+    "tournament_id": "987fcdeb-51a2-43d7-9012-3456789abcde",
+    "role": "athlete"
+  }
+  Response (201 Created):
+  {
+    "application_id": "123e4567-e89b-12d3-a456-426614174000",
+    "tournament_id": "987fcdeb-51a2-43d7-9012-3456789abcde",
+    "role": "athlete",
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "created_at": "2023-10-27T10:05:00Z"
+  }

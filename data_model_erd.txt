@@ -1,0 +1,66 @@
+Data Model (ERD)
+
+erDiagram
+    USERS {
+        UUID id PK
+        string first_name
+        string last_name
+        string email UK
+        string password_hash
+        string role
+        datetime created_at
+    }
+    
+    VENUES {
+        UUID id PK
+        string name
+        string address
+        int capacity
+        string contact_email
+        datetime created_at
+    }
+
+    TOURNAMENTS {
+        UUID id PK
+        string name
+        date start_date
+        date end_date
+        UUID venue_id FK
+        string description
+        datetime created_at
+    }
+
+    APPLICATIONS {
+        UUID id PK
+        UUID user_id FK
+        string category
+        string photo_url
+        date dob
+        string gender
+        string status
+        datetime submitted_at
+        datetime created_at
+    }
+
+    PARTICIPANTS {
+        UUID id PK
+        UUID application_id FK
+        UUID tournament_id FK
+        string role
+        datetime created_at
+    }
+
+    TEAMS {
+        UUID id PK
+        string name
+        UUID lead_id FK
+        UUID tournament_id FK
+        datetime created_at
+    }
+
+    USERS ||--o{ APPLICATIONS : "submits"
+    USERS ||--o{ TEAMS : "leads"
+    VENUES ||--o{ TOURNAMENTS : "hosts"
+    TOURNAMENTS ||--o{ PARTICIPANTS : "includes"
+    TOURNAMENTS ||--o{ TEAMS : "includes"
+    APPLICATIONS ||--o| PARTICIPANTS : "becomes"

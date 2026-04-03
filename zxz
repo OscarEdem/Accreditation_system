@@ -1,0 +1,83 @@
+Internet
+   ↓
+ALB (Load Balancer)
+   ↓
+ECS Fargate (FastAPI containers)
+   ↓
+-----------------------------
+|           |               |
+RDS      Redis        S3
+(Postgres) (Cache)   (Files)
+
+
+
+A. Application Layer
+Use:
+ ECS (Elastic Container Service) with Fargate
+
+Why:
+
+No server management
+
+Native Docker support
+
+Auto scaling
+
+Easier than Kubernetes (don’t over-engineer)
+
+B. Database
+Use:
+ RDS (PostgreSQL)
+
+Why:
+
+Automated backups
+
+Multi-AZ support
+
+Failover handled for you
+
+You don’t want to manage Postgres yourself
+
+C. Redis
+Use:
+ ElastiCache (Redis)
+
+Why:
+
+Managed Redis
+
+Persistence options
+
+Scaling
+
+Low latency inside VPC
+
+D. Storage
+Use:
+S3
+
+For:
+
+badge PDFs
+
+uploaded documents
+
+E. Networking
+Use:
+
+VPC
+
+Private subnets for DB & Redis
+
+Public access only via Load Balancer
+
+
+
+
+dvantages of Separating API and Worker:
+Independent Scaling: If you have a massive influx of web traffic, you can scale your API containers to 10 instances. If you have thousands of heavy background jobs (like sending emails or processing photos), you can scale your worker containers independently without eating up the API's resources.
+Separation of Concerns: The API's only job is to receive an HTTP request, validate it, write/read to the DB, and return a response as fast as possible. The Worker's job is to handle slow, CPU-intensive, or I/O-heavy tasks asynchronously.
+Fault Tolerance: If a worker encounters a memory leak or crashes while processing a corrupted image upload, it only takes down that worker container. Your API remains up and continues serving web traffic to your users.
+Resource Allocation: You can assign different CPU and RAM limits to them. Workers often need more memory, while APIs need more network throughput.
+Here is how we can update your docker-compose.yml to implement this architecture. We will add a redis message broker (which the worker needs to receive tasks) and a worker service that reuses your existing build but runs a background task runner (like Celery or FastStream) instead of Uvicorn.

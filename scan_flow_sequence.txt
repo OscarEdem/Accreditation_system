@@ -1,0 +1,24 @@
+Scan Flow Sequence Diagram
+
+sequenceDiagram
+    autonumber
+    actor Scanner as Gate Scanner (Mobile/Device)
+    participant ALB as Application Load Balancer
+    participant API as FastAPI Backend
+    participant Redis as Redis Cache
+    participant DB as PostgreSQL (RDS)
+
+    Scanner->>ALB: POST /api/v1/scan (QR Data: participant_id)
+    ALB->>API: Route Request
+    
+    API->>Redis: Check if participant_id is cached & valid
+    alt Cache Hit
+        Redis-->>API: Return access status
+    else Cache Miss
+        API->>DB: Query Participant & Linked Application Status
+        DB-->>API: Return Participant Record
+        API->>Redis: Set Cache for future scans
+    end
+
+    API-->>ALB: 200 OK { "access": "GRANTED/DENIED" }
+    ALB-->>Scanner: Display Status

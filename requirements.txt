@@ -1,0 +1,31 @@
+# Web Framework & Server
+fastapi>=0.104.0
+uvicorn[standard]>=0.23.2
+python-multipart>=0.0.6  # Required for OAuth2 form data parsing
+
+# Database & ORM
+sqlalchemy>=2.0.23
+asyncpg>=0.28.0          # Async PostgreSQL driver
+alembic>=1.12.1          # Database migrations
+
+# Data Validation & Settings
+pydantic[email]>=2.4.2   # Includes email-validator for EmailStr
+pydantic-settings[dotenv]>=2.0.3  # Required to parse .env files
+
+# Security & Authentication
+passlib[bcrypt]>=1.7.4   # Password hashing
+pyjwt>=2.8.0             # JWT token generation/validation
+
+# Caching (Optional/Future)
+redis>=5.0.1
+celery>=5.3.6            # Background task worker
+boto3>=1.33.0            # AWS SDK for S3 integration
+requests>=2.31.0         # HTTP client for downloading files
+
+# Testing
+pytest>=7.4.3
+httpx>=0.25.2            # Required for FastAPI TestClient
+
+# Badge & QR Code Generation
+qrcode>=7.4.2            # Generates QR codes for badges
+Pillow>=10.0.1           # Image processing library required by qrcode
