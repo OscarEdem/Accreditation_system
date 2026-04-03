@@ -1,10 +1,13 @@
 import uuid
 import json
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from redis.asyncio import Redis
 from app.models.participant import Participant
 from app.models.application import Application
+
+logger = logging.getLogger(__name__)
 
 class ScanService:
     def __init__(self, session: AsyncSession, redis: Redis):
@@ -14,10 +17,13 @@ class ScanService:
     async def process_scan(self, participant_id: uuid.UUID, zone_id: uuid.UUID) -> dict:
         cache_key = f"scan:{participant_id}:{zone_id}"
         
-        # 1. Check Redis Cache
-        cached_data = await self.redis.get(cache_key)
-        if cached_data:
-            return json.loads(cached_data)
+        # 1. Check Redis Cache (Fail Open if Redis is down)
+        try:
+            cached_data = await self.redis.get(cache_key)
+            if cached_data:
+                return json.loads(cached_data)
+        except Exception as e:
+            logger.warning(f"Redis cache read failed: {e}. Falling back to database.")
 
         # 2. Cache Miss: Query DB (Join Participant and Linked Application)
         stmt = (
@@ -45,6 +51,9 @@ class ScanService:
         }
         
         # 4. Set Cache for future scans (e.g., expire in 5 minutes)
-        await self.redis.set(cache_key, json.dumps(response), ex=300)
+        try:
+            await self.redis.set(cache_key, json.dumps(response), ex=300)
+        except Exception as e:
+            logger.warning(f"Redis cache write failed: {e}.")
         
         return response
