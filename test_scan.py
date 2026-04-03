@@ -6,6 +6,7 @@ from app.main import app
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.api.v1.endpoints.scan import get_scan_service
+from app.db.redis import get_redis
 
 client = TestClient(app)
 
@@ -19,6 +20,15 @@ def override_get_scan_service():
 
 # Apply the mock service globally for this test file
 app.dependency_overrides[get_scan_service] = override_get_scan_service
+
+# Mock Redis so tests don't require a real connection for the rate limiter
+class MockRedis:
+    async def incr(self, key: str):
+        return 1
+    async def expire(self, key: str, seconds: int):
+        pass
+
+app.dependency_overrides[get_redis] = lambda: MockRedis()
 
 def test_scan_endpoint_unauthorized_role_blocked():
     # Mock a user with 'applicant' role (not allowed)
