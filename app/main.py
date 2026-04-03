@@ -3,6 +3,7 @@ import boto3
 import uvicorn
 from contextlib import asynccontextmanager
 import asyncio
+from datetime import datetime, timezone
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
@@ -75,18 +76,14 @@ app = FastAPI(
 app.include_router(api_router, prefix="/api/v1")
 
 @app.get("/", tags=["Health Check"])
-async def health_check():
-    """
-    Root endpoint used by AWS ALB / ECS for health checks.
-    """
-    return {"status": "ok", "message": "Accreditation Management System API is running."}
+def read_root():
+    """Root endpoint for ALB health checks"""
+    return {"status": "healthy", "service": "ams-fastapi", "version": "1.0"}
 
 @app.get("/health", tags=["Health Check"])
-def health():
-    """
-    Standard health check endpoint.
-    """
-    return {"status": "healthy"}
+def health_check():
+    """Dedicated health endpoint"""
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
 
 if __name__ == "__main__":
     # Allows running the app locally via `python app/main.py`
