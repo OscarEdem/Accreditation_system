@@ -29,3 +29,4 @@ httpx>=0.25.2            # Required for FastAPI TestClient
 # Badge & QR Code Generation
 qrcode>=7.4.2            # Generates QR codes for badges
 Pillow>=10.0.1           # Image processing library required by qrcode
+reportlab>=4.0.8         # PDF generation for printable badges
