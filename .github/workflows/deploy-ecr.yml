@@ -5,8 +5,13 @@ on:
     branches: [ "main" ]
 
 env:
+  # Suppresses the Node.js 20 deprecation warning
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   AWS_REGION: eu-north-1
-  ECR_REPOSITORY: accreditation-system-repo # Replace with your actual ECR repository name
+  ECR_REPOSITORY: accreditation-system-repo # MUST MATCH your actual ECR repository name!
+  ECS_CLUSTER: ams-cluster                  # Replace with your actual ECS Cluster name
+  ECS_API_SERVICE: ams-fastapi-task-service-2dlnwx6b
+  ECS_CELERY_SERVICE: ams-celery-service
 
 jobs:
   build:
@@ -40,3 +45,8 @@ jobs:
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        
+    - name: Force ECS services to deploy new image
+      run: |
+        aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_API_SERVICE }} --force-new-deployment
+        aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_CELERY_SERVICE }} --force-new-deployment
