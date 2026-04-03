@@ -8,7 +8,8 @@ env:
   # Suppresses the Node.js 20 deprecation warning
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   AWS_REGION: eu-north-1
-  ECR_REPOSITORY: accreditation-system-repo # MUST MATCH your actual ECR repository name!
+  ECR_API_REPOSITORY: ams-fastapi
+  ECR_CELERY_REPOSITORY: ams-celery
   ECS_CLUSTER: ams-cluster                  # Replace with your actual ECS Cluster name
   ECS_API_SERVICE: ams-fastapi-task-service-2dlnwx6b
   ECS_CELERY_SERVICE: ams-celery-service
@@ -39,12 +40,20 @@ jobs:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         IMAGE_TAG: ${{ github.sha }}
       run: |
-        # Build the Docker image
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-        # Push the specific commit SHA tag and a 'latest' tag
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        # Build the Docker image once
+        docker build -t app-image:$IMAGE_TAG .
+        
+        # Tag and Push to the FastAPI repository
+        docker tag app-image:$IMAGE_TAG $ECR_REGISTRY/$ECR_API_REPOSITORY:$IMAGE_TAG
+        docker tag app-image:$IMAGE_TAG $ECR_REGISTRY/$ECR_API_REPOSITORY:latest
+        docker push $ECR_REGISTRY/$ECR_API_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_API_REPOSITORY:latest
+        
+        # Tag and Push to the Celery repository
+        docker tag app-image:$IMAGE_TAG $ECR_REGISTRY/$ECR_CELERY_REPOSITORY:$IMAGE_TAG
+        docker tag app-image:$IMAGE_TAG $ECR_REGISTRY/$ECR_CELERY_REPOSITORY:latest
+        docker push $ECR_REGISTRY/$ECR_CELERY_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_CELERY_REPOSITORY:latest
         
     - name: Force ECS services to deploy new image
       run: |
