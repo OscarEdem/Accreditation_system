@@ -9,6 +9,7 @@ from redis.asyncio import Redis
 from app.models.participant import Participant
 from app.models.application import Application
 from app.models.scan_log import ScanLog
+from app.models.zone_access import ZoneAccess
 from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -73,11 +74,16 @@ class ScanService:
         is_granted = application_status.lower() == "approved"
         reason = None if is_granted else f"Application status: {application_status}"
         
-        # Access Matrix Check (Placeholder logic for future Phase 2 expansion)
+        # Access Matrix Check
         if is_granted:
-            # Example: if zone.name == "VIP" and participant.role != "vip": is_granted = False
-            # This is where you would query a dedicated ZoneAccess table linking roles to zones.
-            pass
+            access_stmt = select(ZoneAccess).where(
+                ZoneAccess.zone_id == zone_id,
+                ZoneAccess.category_id == participant.category_id
+            )
+            access_result = await self.session.execute(access_stmt)
+            if not access_result.scalars().first():
+                is_granted = False
+                reason = "Category does not have access to this zone."
 
         response = {
             "access": "GRANTED" if is_granted else "DENIED",

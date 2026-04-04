@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import participants, applications, auth, upload, scan, badges, venues, tournaments
+from app.api.v1.endpoints import participants, applications, auth, upload, scan, badges, venues, tournaments, zones, categories, stats
 
 api_router = APIRouter()
 
@@ -11,3 +11,6 @@ api_router.include_router(applications.router, prefix="/applications", tags=["Ap
 api_router.include_router(badges.router, prefix="/badges", tags=["Badges"])
 api_router.include_router(venues.router, prefix="/venues", tags=["Venues"])
 api_router.include_router(tournaments.router, prefix="/tournaments", tags=["Tournaments"])
+api_router.include_router(zones.router, prefix="/zones", tags=["Zones"])
+api_router.include_router(categories.router, prefix="/categories", tags=["Categories"])
+api_router.include_router(stats.router, prefix="/stats", tags=["Dashboards & Stats"])

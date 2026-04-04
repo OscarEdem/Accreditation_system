@@ -13,3 +13,4 @@ from app.models.vip_guest import VIPGuest
 from app.models.zone import Zone
 from app.models.badge import Badge
 from app.models.scan_log import ScanLog
+from app.models.zone_access import ZoneAccess
