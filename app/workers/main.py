@@ -5,8 +5,6 @@ import logging
 import asyncio
 import time
 from celery import Celery
-from celery.worker.consumer.mingle import Mingle
-from celery.worker.consumer.gossip import Gossip
 from celery.signals import worker_process_init
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
@@ -27,14 +25,7 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     enable_utc=True,
-    worker_enable_remote_control=False,  # Disables Mingle/Gossip (Fixes AWS Redis ClusterCrossSlotError)
-    worker_send_task_events=False,
 )
-
-# The ultimate nuclear option: Monkey-patch the classes so they physically cannot run.
-# Celery 5.x often ignores .discard(), so we replace their start methods with empty functions.
-Mingle.start = lambda self, *args, **kwargs: None
-Gossip.start = lambda self, *args, **kwargs: None
 
 # Only apply SSL configurations if the URL actually uses the rediss:// scheme (e.g. AWS ElastiCache)
 if settings.CELERY_BROKER_URL.startswith("rediss://"):

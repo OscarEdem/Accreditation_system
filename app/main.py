@@ -10,6 +10,7 @@ from sqlalchemy import text
 from redis.asyncio import Redis
 from app.api.v1.router import api_router
 from app.config.settings import settings
+from app.workers.main import send_email_notification
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -97,6 +98,12 @@ def read_root():
 def health_check():
     """Dedicated health endpoint"""
     return {"status": "ok", "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+
+@app.post("/test-email", tags=["Testing"])
+def trigger_test_email(email: str):
+    """Test endpoint to trigger a Celery background task."""
+    task = send_email_notification.delay(email, "Test Subject", "Hello from AWS Celery!")
+    return {"message": "Email task dispatched!", "task_id": task.id}
 
 if __name__ == "__main__":
     # Allows running the app locally via `python app/main.py`
