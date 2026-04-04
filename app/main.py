@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 import asyncio
 from datetime import datetime, timezone
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
 from redis.asyncio import Redis
@@ -87,6 +88,17 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# --- CORS Configuration ---
+# This allows your Next.js/React frontend to communicate with the API without browser security blocks.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In strict production, replace "*" with your frontend's exact domain (e.g., ["https://accra2026.com"])
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows GET, POST, PUT, DELETE, etc.
+    allow_headers=["*"],  # Allows Authorization (JWT) and Content-Type headers
+)
+
+# --- Router Registration ---
 app.include_router(api_router, prefix="/api/v1")
 
 @app.get("/", tags=["Health Check"])

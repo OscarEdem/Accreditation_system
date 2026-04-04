@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import List
 from pydantic import BaseModel, ConfigDict
 
 class OrganizationBase(BaseModel):
@@ -13,3 +14,7 @@ class OrganizationRead(OrganizationBase):
     created_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
+
+class OrganizationListResponse(BaseModel):
+    total: int
+    items: List[OrganizationRead]

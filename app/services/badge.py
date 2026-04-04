@@ -45,6 +45,28 @@ class BadgeService:
             await self.session.rollback()
             raise ValueError("A badge already exists for this participant.")
 
+    async def create_badges_batch(self, participant_ids: list[uuid.UUID]) -> list[Badge]:
+        """Creates multiple badges in a single transaction."""
+        badges = []
+        for pid in participant_ids:
+            serial_number = f"ACCRA-{uuid.uuid4().hex[:8].upper()}"
+            signature = self.generate_signature(str(pid), serial_number)
+            badges.append(Badge(
+                participant_id=pid,
+                serial_number=serial_number,
+                qr_hmac=signature,
+                status="active"
+            ))
+        try:
+            self.session.add_all(badges)
+            await self.session.commit()
+            for b in badges:
+                await self.session.refresh(b)
+            return badges
+        except IntegrityError:
+            await self.session.rollback()
+            raise ValueError("One or more participants already have badges.")
+
     def generate_qr_code(self, badge: Badge) -> str:
         """Generates a base64 encoded PNG of the QR code."""
         qr_data = json.dumps({

@@ -16,3 +16,14 @@ class UserRead(UserBase):
     created_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
+
+class UserUpdateRole(BaseModel):
+    role: str
+    organization_id: uuid.UUID | None = None
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str

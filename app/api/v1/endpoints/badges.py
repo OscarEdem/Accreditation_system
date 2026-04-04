@@ -1,6 +1,7 @@
 import uuid
-from typing import Annotated
+from typing import Annotated, List
 from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.session import get_db
@@ -15,6 +16,9 @@ router = APIRouter()
 
 # Only admins and accreditation officers should be able to generate badges
 allow_badge_roles = RoleChecker(["admin", "officer"])
+
+class BatchBadgeRequest(BaseModel):
+    participant_ids: List[uuid.UUID]
 
 @router.post("/{participant_id}", status_code=201)
 async def generate_badge(
@@ -36,6 +40,27 @@ async def generate_badge(
         "serial_number": badge.serial_number,
         "qr_image_base64": qr_base64
     }
+
+@router.post("/batch/generate", status_code=201)
+async def generate_badges_batch(
+    request: BatchBadgeRequest,
+    current_user: Annotated[User, Depends(allow_badge_roles)],
+    db: AsyncSession = Depends(get_db)
+):
+    service = BadgeService(db)
+    try:
+        badges = await service.create_badges_batch(request.participant_ids)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+        
+    result = []
+    for badge in badges:
+        result.append({
+            "badge_id": badge.id,
+            "serial_number": badge.serial_number,
+            "qr_image_base64": service.generate_qr_code(badge)
+        })
+    return result
 
 @router.get("/{participant_id}/pdf", status_code=200)
 async def download_badge_pdf(

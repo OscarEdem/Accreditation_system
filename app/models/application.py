@@ -9,6 +9,13 @@ class Application(BaseModel):
     __tablename__ = "applications"
     
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    
+    # The actual participant's personal details
+    first_name: Mapped[str] = mapped_column(String)
+    last_name: Mapped[str] = mapped_column(String)
+    email: Mapped[str] = mapped_column(String)
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True)
+    
     category: Mapped[str] = mapped_column(String)
     photo_url: Mapped[str | None] = mapped_column(String, nullable=True)
     dob: Mapped[date | None] = mapped_column(Date, nullable=True)
