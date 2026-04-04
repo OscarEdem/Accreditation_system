@@ -25,6 +25,8 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     enable_utc=True,
+    worker_enable_remote_control=False,  # Disables Mingle/Gossip (Fixes AWS Redis ClusterCrossSlotError)
+    worker_send_task_events=False,
 )
 
 # Only apply SSL configurations if the URL actually uses the rediss:// scheme (e.g. AWS ElastiCache)
