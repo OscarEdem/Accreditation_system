@@ -1,3 +1,4 @@
+import os
 import asyncio
 import uuid
 from datetime import datetime, timezone
@@ -24,13 +25,16 @@ async def create_admin():
             print("Admin user already exists!")
             return
 
+        # Securely fetch the password from environment variables, defaulting to admin123 for local dev
+        admin_password = os.getenv("ADMIN_PASSWORD", "admin123")
+
         # 2. Create the new admin user
         admin = User(
             first_name="Super",
             last_name="Admin",
             email="admin@example.com",
             role="admin",
-            password_hash=get_password_hash("admin123"),
+            password_hash=get_password_hash(admin_password),
             created_at=datetime.now(timezone.utc).replace(tzinfo=None)
         )
         session.add(admin)
