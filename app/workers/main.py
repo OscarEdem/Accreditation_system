@@ -31,9 +31,10 @@ celery_app.conf.update(
     worker_send_task_events=False,
 )
 
-# Programmatically strip out Mingle and Gossip to completely prevent Redis Cluster broadcast crashes
-celery_app.steps['consumer'].discard(Mingle)
-celery_app.steps['consumer'].discard(Gossip)
+# The ultimate nuclear option: Monkey-patch the classes so they physically cannot run.
+# Celery 5.x often ignores .discard(), so we replace their start methods with empty functions.
+Mingle.start = lambda self, *args, **kwargs: None
+Gossip.start = lambda self, *args, **kwargs: None
 
 # Only apply SSL configurations if the URL actually uses the rediss:// scheme (e.g. AWS ElastiCache)
 if settings.CELERY_BROKER_URL.startswith("rediss://"):
