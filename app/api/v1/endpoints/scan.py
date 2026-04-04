@@ -31,16 +31,11 @@ async def scan_participant(
     # Rate Limiting: Max 10 scans per 10 seconds per scanner device
     rate_limit_key = f"rate_limit:scan:user:{current_user.id}"
     
-    try:
-        requests_made = await redis.incr(rate_limit_key)
-        if requests_made == 1:
-            await redis.expire(rate_limit_key, 10)  # 10-second window
-            
-        if requests_made > 10:
-            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many scans. Please slow down.")
-    except HTTPException:
-        raise  # Re-raise the 429 if the limit is actually hit
-    except Exception as e:
-        logger.warning(f"Redis rate limiting failed for user {current_user.id}: {e}")
+    requests_made = await redis.incr(rate_limit_key)
+    if requests_made == 1:
+        await redis.expire(rate_limit_key, 10)  # 10-second window
+        
+    if requests_made > 10:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many scans. Please slow down.")
 
     return await service.process_scan(request.participant_id, request.zone_id)

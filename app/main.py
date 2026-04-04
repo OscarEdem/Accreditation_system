@@ -41,10 +41,12 @@ async def lifespan(app: FastAPI):
         )
         await asyncio.wait_for(redis_client.ping(), timeout=5.0)
         logger.info("Redis connection successful.")
-    except asyncio.TimeoutError:
+    except asyncio.TimeoutError as e:
         logger.error("Redis connection timed out during startup.")
+        raise e
     except Exception as e:
         logger.error(f"Redis connection failed: {e}")
+        raise e
     
     # Log S3 configuration
     logger.info(f"AWS S3 configured for bucket: {settings.S3_BUCKET_NAME} in region {settings.AWS_REGION}")

@@ -17,13 +17,10 @@ class ScanService:
     async def process_scan(self, participant_id: uuid.UUID, zone_id: uuid.UUID) -> dict:
         cache_key = f"scan:{participant_id}:{zone_id}"
         
-        # 1. Check Redis Cache (Fail Open if Redis is down)
-        try:
-            cached_data = await self.redis.get(cache_key)
-            if cached_data:
-                return json.loads(cached_data)
-        except Exception as e:
-            logger.warning(f"Redis cache read failed: {e}. Falling back to database.")
+        # 1. Check Redis Cache (Strict dependency)
+        cached_data = await self.redis.get(cache_key)
+        if cached_data:
+            return json.loads(cached_data)
 
         # 2. Cache Miss: Query DB (Join Participant and Linked Application)
         stmt = (
@@ -51,9 +48,6 @@ class ScanService:
         }
         
         # 4. Set Cache for future scans (e.g., expire in 5 minutes)
-        try:
-            await self.redis.set(cache_key, json.dumps(response), ex=300)
-        except Exception as e:
-            logger.warning(f"Redis cache write failed: {e}.")
+        await self.redis.set(cache_key, json.dumps(response), ex=300)
         
         return response
