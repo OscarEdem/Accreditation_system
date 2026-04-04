@@ -1,6 +1,15 @@
-version: '3.8'
-
 services:
+  db:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: localpassword
+      POSTGRES_DB: ams_local_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   api:
     build: .
     ports:
@@ -10,6 +19,7 @@ services:
     volumes:
       - .:/app
     depends_on:
+      - db
       - redis
 
   worker:
@@ -21,9 +31,13 @@ services:
     volumes:
       - .:/app
     depends_on:
+      - db
       - redis
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+
+volumes:
+  postgres_data:

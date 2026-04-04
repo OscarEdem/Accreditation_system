@@ -25,9 +25,13 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     enable_utc=True,
-    broker_use_ssl={"ssl_cert_reqs": "none"},
-    redis_backend_use_ssl={"ssl_cert_reqs": "none"},
 )
+
+# Only apply SSL configurations if the URL actually uses the rediss:// scheme (e.g. AWS ElastiCache)
+if settings.CELERY_BROKER_URL.startswith("rediss://"):
+    celery_app.conf.update(broker_use_ssl={"ssl_cert_reqs": "none"})
+if settings.CELERY_RESULT_BACKEND.startswith("rediss://"):
+    celery_app.conf.update(redis_backend_use_ssl={"ssl_cert_reqs": "none"})
 
 @worker_process_init.connect
 def init_worker(**kwargs):

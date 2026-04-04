@@ -80,8 +80,8 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down Accreditation Management System API...")
 
 app = FastAPI(
-    title="Participant Data Collection API",
-    description="MVP for participant data collection",
+    title="Accreditation Management System API",
+    description="Production-grade API for managing tournament accreditations, participants, and secure zone access.",
     version="1.0.0",
     lifespan=lifespan
 )

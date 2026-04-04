@@ -2,7 +2,7 @@
 fastapi>=0.104.0
 uvicorn[standard]>=0.23.2
 python-multipart>=0.0.6  # Required for OAuth2 form data parsing
-
+bcrypt==3.2.2
 # Database & ORM
 sqlalchemy>=2.0.23
 asyncpg>=0.28.0          # Async PostgreSQL driver
@@ -13,7 +13,7 @@ pydantic[email]>=2.4.2   # Includes email-validator for EmailStr
 pydantic-settings[dotenv]>=2.0.3  # Required to parse .env files
 
 # Security & Authentication
-passlib[bcrypt]>=1.7.4   # Password hashing
+passlib>=1.7.4           # Password hashing
 pyjwt>=2.8.0             # JWT token generation/validation
 
 # Caching (Optional/Future)
