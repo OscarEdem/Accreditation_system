@@ -1,11 +1,14 @@
 import uuid
 import json
 import logging
+import hmac
+import hashlib
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from redis.asyncio import Redis
 from app.models.participant import Participant
 from app.models.application import Application
+from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +17,19 @@ class ScanService:
         self.session = session
         self.redis = redis
 
-    async def process_scan(self, participant_id: uuid.UUID, zone_id: uuid.UUID) -> dict:
+    def verify_qr_signature(self, participant_id: str, serial_number: str, signature: str) -> bool:
+        """Verifies the HMAC SHA-256 signature from the QR code."""
+        message = f"{participant_id}:{serial_number}".encode("utf-8")
+        secret = settings.SECRET_KEY.encode("utf-8")
+        expected_signature = hmac.new(secret, message, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected_signature, signature)
+
+    async def process_scan(self, participant_id: uuid.UUID, zone_id: uuid.UUID, serial_number: str, signature: str) -> dict:
+        # 0. Verify Cryptographic Signature (Zero-Trust Check)
+        if not self.verify_qr_signature(str(participant_id), serial_number, signature):
+            logger.warning(f"FORGERY ATTEMPT: Invalid signature for participant {participant_id}")
+            return {"access": "DENIED", "reason": "Invalid or forged QR code", "role": None}
+
         cache_key = f"scan:{participant_id}:{zone_id}"
         
         # 1. Check Redis Cache (Strict dependency)

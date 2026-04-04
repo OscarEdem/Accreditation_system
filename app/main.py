@@ -14,11 +14,10 @@ from app.config.settings import settings
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("Starting up Accreditation Management System API...")
+async def run_startup_checks():
+    """Runs external connection checks in the background to avoid blocking API boot sequence."""
     
-    # Log Database configuration (masking password for security)
+    # 1. Database Check
     safe_db_url = settings.DATABASE_URL.split("@")[-1] if "@" in settings.DATABASE_URL else "Local/Unknown"
     logger.info(f"Initializing Database connection to: {safe_db_url}")
     try:
@@ -29,7 +28,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Database connection failed: {e}")
     
-    # Log Redis configuration (masking password if present)
+    # 2. Redis Check
     safe_redis_url = settings.REDIS_URL.split("@")[-1] if "@" in settings.REDIS_URL else settings.REDIS_URL
     logger.info(f"Initializing Redis connection to: {safe_redis_url}")
     try:
@@ -39,30 +38,42 @@ async def lifespan(app: FastAPI):
             socket_timeout=5,
             ssl_cert_reqs="none"
         )
-        await asyncio.wait_for(redis_client.ping(), timeout=5.0)
+        await asyncio.wait_for(redis_client.ping(), timeout=10.0)
         logger.info("Redis connection successful.")
-    except asyncio.TimeoutError as e:
+    except asyncio.TimeoutError:
         logger.error("Redis connection timed out during startup.")
-        raise e
     except Exception as e:
         logger.error(f"Redis connection failed: {e}")
-        raise e
     
-    # Log S3 configuration
+    # 3. AWS S3 Check
     logger.info(f"AWS S3 configured for bucket: {settings.S3_BUCKET_NAME} in region {settings.AWS_REGION}")
-    try:
-        s3_client = boto3.client(
-            "s3",
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_REGION
-        )
-        s3_client.head_bucket(Bucket=settings.S3_BUCKET_NAME)
-        logger.info("AWS S3 connection successful.")
-    except Exception as e:
-        logger.error(f"AWS S3 connection failed: {e}")
+    
+    def check_s3_sync():
+        """Synchronous wrapper for boto3 to run in a separate thread."""
+        try:
+            s3_client = boto3.client(
+                "s3",
+                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                region_name=settings.AWS_REGION
+            )
+            s3_client.head_bucket(Bucket=settings.S3_BUCKET_NAME)
+            logger.info("AWS S3 connection successful.")
+        except Exception as e:
+            logger.error(f"AWS S3 connection failed: {e}")
+            
+    # Offload the blocking boto3 network call to a thread so it doesn't freeze FastAPI
+    await asyncio.to_thread(check_s3_sync)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Starting up Accreditation Management System API...")
+    
+    # Fire-and-forget: dispatch the checks to the background!
+    # Uvicorn will NOT wait for this to finish before answering health checks.
+    asyncio.create_task(run_startup_checks())
         
-    logger.info("Application startup checks complete. Verifying bind to port 8000 via Uvicorn...")
+    logger.info("Application startup checks dispatched. Verifying bind to port 8000 via Uvicorn...")
     
     yield
     

@@ -38,4 +38,9 @@ async def scan_participant(
     if requests_made > 10:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many scans. Please slow down.")
 
-    return await service.process_scan(request.participant_id, request.zone_id)
+    return await service.process_scan(
+        participant_id=request.participant_id,
+        zone_id=request.zone_id,
+        serial_number=request.serial_number,
+        signature=request.signature
+    )

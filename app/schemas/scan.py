@@ -4,6 +4,8 @@ from pydantic import BaseModel
 class ScanRequest(BaseModel):
     participant_id: uuid.UUID
     zone_id: uuid.UUID
+    serial_number: str
+    signature: str
 
 class ScanResponse(BaseModel):
     access: str
