@@ -4,7 +4,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/app_db"
     REDIS_URL: str = "redis://redis:6379/0"
     CELERY_BROKER_URL: str = "redis://redis:6379/0"
-    CELERY_RESULT_BACKEND: str = "redis://redis:6379/1"
+    CELERY_RESULT_BACKEND: str = "redis://redis:6379/0"
     SECRET_KEY: str = "YOUR-SUPER-SECRET-KEY-REPLACE-IN-PRODUCTION"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
