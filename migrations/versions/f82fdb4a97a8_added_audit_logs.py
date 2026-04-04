@@ -33,9 +33,9 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_audit_logs_entity_id'), 'audit_logs', ['entity_id'], unique=False)
     op.create_index(op.f('ix_audit_logs_entity_type'), 'audit_logs', ['entity_type'], unique=False)
-    op.add_column('applications', sa.Column('first_name', sa.String(), nullable=False))
-    op.add_column('applications', sa.Column('last_name', sa.String(), nullable=False))
-    op.add_column('applications', sa.Column('email', sa.String(), nullable=False))
+    op.add_column('applications', sa.Column('first_name', sa.String(), server_default='Unknown', nullable=False))
+    op.add_column('applications', sa.Column('last_name', sa.String(), server_default='Unknown', nullable=False))
+    op.add_column('applications', sa.Column('email', sa.String(), server_default='unknown@example.com', nullable=False))
     op.add_column('applications', sa.Column('organization_id', sa.UUID(), nullable=True))
     op.create_foreign_key(None, 'applications', 'organizations', ['organization_id'], ['id'])
     # ### end Alembic commands ###
