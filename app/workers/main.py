@@ -9,6 +9,7 @@ from celery.signals import worker_process_init
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
 from redis.asyncio import Redis
+from botocore.exceptions import ClientError
 from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -86,13 +87,46 @@ def init_worker(**kwargs):
 
 @celery_app.task(name="send_email_notification", bind=True, max_retries=3)
 def send_email_notification(self, recipient_email: str, subject: str, body: str):
-    """Background task to send email notifications to users."""
+    """Background task to send email notifications to users using AWS SES."""
     logger.info(f"Preparing to send email to {recipient_email} - Subject: {subject}")
+    
+    if not settings.AWS_SES_SENDER:
+        logger.warning("AWS_SES_SENDER is not configured. Simulating email send.")
+        time.sleep(2)
+        return {"status": "simulated", "recipient": recipient_email}
+        
     try:
-        # TODO: Integrate with an actual email provider like AWS SES, SendGrid, or SMTP here
-        time.sleep(2)  # Simulating network delay
-        logger.info(f"Successfully sent email to {recipient_email}")
-        return {"status": "success", "recipient": recipient_email}
+        ses_client = boto3.client(
+            "ses",
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+            region_name=settings.AWS_REGION
+        )
+        
+        response = ses_client.send_email(
+            Source=settings.AWS_SES_SENDER,
+            Destination={
+                'ToAddresses': [recipient_email]
+            },
+            Message={
+                'Subject': {
+                    'Data': subject,
+                    'Charset': 'UTF-8'
+                },
+                'Body': {
+                    'Text': {
+                        'Data': body,
+                        'Charset': 'UTF-8'
+                    }
+                }
+            }
+        )
+        
+        logger.info(f"Successfully sent email to {recipient_email}. Message ID: {response.get('MessageId')}")
+        return {"status": "success", "recipient": recipient_email, "message_id": response.get("MessageId")}
+    except ClientError as e:
+        logger.error(f"AWS SES Error sending email to {recipient_email}: {e.response['Error']['Message']}")
+        raise self.retry(exc=e, countdown=60)
     except Exception as exc:
         logger.error(f"Failed to send email to {recipient_email}: {exc}")
         # Retry the task in 60 seconds in case of transient network issues

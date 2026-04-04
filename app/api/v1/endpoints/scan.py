@@ -42,5 +42,6 @@ async def scan_participant(
         participant_id=request.participant_id,
         zone_id=request.zone_id,
         serial_number=request.serial_number,
-        signature=request.signature
+        signature=request.signature,
+        scanner_id=current_user.id
     )

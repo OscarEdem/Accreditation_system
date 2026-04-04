@@ -13,6 +13,10 @@ class ApplicationBase(BaseModel):
 class ApplicationCreate(ApplicationBase):
     pass
 
+class ApplicationReview(BaseModel):
+    status: str  # e.g., "approved", "rejected", "pending"
+    reviewer_comments: Optional[str] = None
+
 class ApplicationRead(ApplicationBase):
     id: uuid.UUID
     status: str

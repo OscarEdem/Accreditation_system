@@ -12,7 +12,7 @@ client = TestClient(app)
 
 # 1. Create a mock service so we don't need real DB/Redis for RBAC tests
 class MockScanService:
-    async def process_scan(self, participant_id: uuid.UUID, zone_id: uuid.UUID) -> dict:
+    async def process_scan(self, participant_id: uuid.UUID, zone_id: uuid.UUID, serial_number: str, signature: str, scanner_id: uuid.UUID) -> dict:
         return {"access": "GRANTED", "reason": None, "role": "athlete"}
 
 def override_get_scan_service():
@@ -40,7 +40,7 @@ def test_scan_endpoint_unauthorized_role_blocked():
 
     response = client.post(
         "/api/v1/scan/",
-        json={"participant_id": str(uuid.uuid4()), "zone_id": str(uuid.uuid4())}
+        json={"participant_id": str(uuid.uuid4()), "zone_id": str(uuid.uuid4()), "serial_number": "TEST-123", "signature": "abc"}
     )
 
     assert response.status_code == 403
@@ -55,7 +55,7 @@ def test_scan_endpoint_authorized_admin_allowed():
 
     response = client.post(
         "/api/v1/scan/",
-        json={"participant_id": str(uuid.uuid4()), "zone_id": str(uuid.uuid4())}
+        json={"participant_id": str(uuid.uuid4()), "zone_id": str(uuid.uuid4()), "serial_number": "TEST-123", "signature": "abc"}
     )
 
     assert response.status_code == 200
@@ -70,7 +70,7 @@ def test_scan_endpoint_authorized_scanner_allowed():
 
     response = client.post(
         "/api/v1/scan/",
-        json={"participant_id": str(uuid.uuid4()), "zone_id": str(uuid.uuid4())}
+        json={"participant_id": str(uuid.uuid4()), "zone_id": str(uuid.uuid4()), "serial_number": "TEST-123", "signature": "abc"}
     )
 
     assert response.status_code == 200

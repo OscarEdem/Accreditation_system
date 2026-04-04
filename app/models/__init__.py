@@ -12,3 +12,4 @@ from app.models.service_staff import ServiceStaff
 from app.models.vip_guest import VIPGuest
 from app.models.zone import Zone
 from app.models.badge import Badge
+from app.models.scan_log import ScanLog
