@@ -3,18 +3,22 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
+from redis.asyncio import Redis
 
 from app.db.session import get_db
+from app.db.redis import get_redis
 from app.schemas.token import Token
-from app.schemas.user import UserCreate, UserRead, ForgotPasswordRequest, ResetPasswordRequest
+from app.schemas.user import UserCreate, UserRead, ForgotPasswordRequest, ResetPasswordRequest, UserInvite, AcceptInviteRequest, ResendInviteRequest
 from app.services.user import UserService
 from app.core.security import create_access_token
 from app.config.settings import settings
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, RoleChecker
 from app.models.user import User
 from app.workers.main import send_email_notification
 
 router = APIRouter()
+
+allow_admin = RoleChecker(["admin", "loc_admin"])
 
 def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
     return UserService(db)
@@ -45,7 +49,19 @@ async def read_users_me(current_user: Annotated[User, Depends(get_current_user)]
     return current_user
 
 @router.post("/forgot-password")
-async def forgot_password(request: ForgotPasswordRequest, service: UserService = Depends(get_user_service)):
+async def forgot_password(
+    request: ForgotPasswordRequest, 
+    service: UserService = Depends(get_user_service),
+    redis: Redis = Depends(get_redis)
+):
+    # Rate Limiting: Max 3 requests per minute per email
+    rate_limit_key = f"rate_limit:forgot_pwd:{request.email}"
+    requests_made = await redis.incr(rate_limit_key)
+    if requests_made == 1:
+        await redis.expire(rate_limit_key, 60)  # 60-second window
+    if requests_made > 3:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many requests. Please wait a minute.")
+
     user = await service.get_user_by_email(request.email)
     if user:
         token = service.create_password_reset_token(user.email)
@@ -62,3 +78,59 @@ async def reset_password(request: ResetPasswordRequest, service: UserService = D
     if not await service.reset_password(request.token, request.new_password):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token")
     return {"message": "Password successfully reset."}
+
+@router.post("/invite", response_model=UserRead, status_code=201)
+async def invite_user(
+    user_in: UserInvite,
+    current_user: Annotated[User, Depends(allow_admin)],
+    service: UserService = Depends(get_user_service)
+):
+    user = await service.invite_user(user_in)
+    
+    token = service.create_invite_token(user.email)
+    invite_link = f"https://accra2026.com/accept-invite?token={token}"
+    resend_link = f"https://accra2026.com/resend-invite"
+    
+    send_email_notification.delay(
+        recipient_email=user.email,
+        subject="ACCRA 2026 - Account Invitation",
+        body=(
+            f"Hello {user.first_name},\n\n"
+            f"You have been invited as a '{user.role.value}' for ACCRA 2026.\n"
+            f"Click here to set your password and access your account (valid for 24 hours):\n{invite_link}\n\n"
+            f"If this link has expired, you can request a new one here:\n{resend_link}"
+        )
+    )
+    return user
+
+@router.post("/accept-invite")
+async def accept_invite(request: AcceptInviteRequest, service: UserService = Depends(get_user_service)):
+    if not await service.accept_invite(request.token, request.new_password):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired invite token")
+    return {"message": "Password successfully set. You can now log in."}
+
+@router.post("/resend-invite")
+async def resend_invite(
+    request: ResendInviteRequest, 
+    service: UserService = Depends(get_user_service),
+    redis: Redis = Depends(get_redis)
+):
+    # Rate Limiting: Max 3 requests per minute per email
+    rate_limit_key = f"rate_limit:resend_invite:{request.email}"
+    requests_made = await redis.incr(rate_limit_key)
+    if requests_made == 1:
+        await redis.expire(rate_limit_key, 60)  # 60-second window
+    if requests_made > 3:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many requests. Please wait a minute.")
+
+    user = await service.get_user_by_email(request.email)
+    if user:
+        token = service.create_invite_token(user.email)
+        invite_link = f"https://accra2026.com/accept-invite?token={token}"
+        
+        send_email_notification.delay(
+            recipient_email=user.email,
+            subject="ACCRA 2026 - New Account Invitation",
+            body=f"Hello {user.first_name},\n\nA new invitation link has been generated for your ACCRA 2026 account.\nClick here to set your password (valid for 24 hours):\n{invite_link}"
+        )
+    return {"message": "If that email is registered, a new invite link has been sent."}

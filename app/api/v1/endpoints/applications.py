@@ -1,9 +1,12 @@
 import uuid
+import csv
+import io
 from typing import List, Annotated
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.schemas.application import ApplicationCreate, ApplicationRead, ApplicationReview, ApplicationReadWithSubmitter, ApplicationListResponse
+from app.schemas.document import DocumentReview, DocumentRead
 from app.services.application import ApplicationService
 from app.api.deps import get_current_user, RoleChecker
 from app.models.user import User
@@ -31,6 +34,34 @@ async def create_application(
         application_in.user_id = application_in.user_id or current_user.id
         
     return await service.create_application(application_in, bypass_duplicate_check=is_privileged)
+
+@router.get("/export", response_class=Response)
+async def export_applications_csv(
+    current_user: Annotated[User, Depends(allow_review_roles)],
+    service: ApplicationService = Depends(get_application_service),
+    status: str | None = Query(None, description="Filter by status"),
+    category: str | None = Query(None, description="Filter by category"),
+    organization_id: uuid.UUID | None = Query(None, description="Filter by organization ID"),
+):
+    """Exports all filtered applications as a downloadable CSV file."""
+    items, _ = await service.get_applications(
+        status=status, category=category, organization_id=organization_id, limit=None
+    )
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    if items:
+        headers = list(items[0].keys())
+        writer.writerow(headers)
+        for item in items:
+            writer.writerow([item.get(h, "") for h in headers])
+    else:
+        writer.writerow(["No applications found matching criteria."])
+        
+    response = Response(content=output.getvalue(), media_type="text/csv")
+    response.headers["Content-Disposition"] = 'attachment; filename="applications_export.csv"'
+    return response
 
 @router.get("/", response_model=ApplicationListResponse)
 async def get_applications(
@@ -89,3 +120,22 @@ async def review_application(
             )
             
     return application
+
+@router.patch("/documents/{document_id}/review", response_model=DocumentRead)
+async def review_document(
+    document_id: uuid.UUID,
+    review_in: DocumentReview,
+    current_user: Annotated[User, Depends(allow_review_roles)],
+    service: ApplicationService = Depends(get_application_service)
+):
+    document = await service.review_document(document_id, current_user.id, review_in)
+    
+    if review_in.status.lower() == "rejected":
+        application = await service.get_application_by_id(document.application_id)
+        if application:
+            send_email_notification.delay(
+                recipient_email=application.email,
+                subject=f"Action Required: Update your ACCRA 2026 Document ({document.document_type.upper()})",
+                body=f"Hello {application.first_name},\n\nThere is an issue with the '{document.document_type}' document you uploaded for your accreditation application.\n\nReason: {review_in.rejection_reason}\n\nPlease log in to the portal to re-upload a valid document so your application can proceed."
+            )
+    return document

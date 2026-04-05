@@ -1,0 +1,162 @@
+===============================================================================
+ACCRA 2026 ACCREDITATION MANAGEMENT SYSTEM (AMS)
+FULL SYSTEM DOCUMENTATION & LOGIC ARCHITECTURE
+===============================================================================
+
+1. SYSTEM OVERVIEW
+-------------------------------------------------------------------------------
+The Accreditation Management System (AMS) is a highly secure, scalable, and 
+real-time platform designed to manage the full lifecycle of accreditation for 
+the ACCRA 2026 tournament. 
+
+It handles participant onboarding, multi-step application approvals, cryptographic 
+badge generation, and high-speed venue access control via QR scanning.
+
+Tech Stack: FastAPI (Python), PostgreSQL (Asyncpg), Redis (Caching & Pub/Sub), 
+Celery (Background Workers), SQLAlchemy, Alembic, AWS (ECS, RDS, ElastiCache, 
+S3, SES, ALB).
+
+
+2. USERS & ROLE-BASED ACCESS CONTROL (RBAC)
+-------------------------------------------------------------------------------
+The system utilizes strict RBAC enforced by a FastAPI `RoleChecker` dependency.
+- Super Admin (admin): Full system control, can create other admins and organizations.
+- LOC Admin (loc_admin): Manages tournament configuration, venues, and zones.
+- Accreditation Officer (officer): Reviews applications, generates badges.
+- Organization Admin (org_admin): Submits multiple applications on behalf of a team.
+- Scanner Operator (scanner): Operates the mobile scanner app at venue gates.
+- Applicant (applicant): Default role. Can only submit an application for themselves.
+
+
+3. CORE WORKFLOWS AND LOGIC PROCEDURES
+-------------------------------------------------------------------------------
+
+### 3.1 Authentication & User Onboarding
+Logic:
+- Registration: Anyone can register, but the system forcefully overrides their 
+  requested role to 'applicant' to prevent privilege escalation.
+- Login: Uses OAuth2 Password Bearer. Returns a stateless JWT valid for 30 minutes.
+- Admin Invitations: Admins can invite `org_admin` or `scanner` users. The system 
+  generates a random secure password, saves the user, and creates a 24-hour expiring 
+  JWT "invite token". Celery sends an AWS SES email with an activation link.
+- Password Reset & Resend Invite: Uses expiring JWTs. Both endpoints are strictly 
+  rate-limited by Redis (max 3 requests per minute per email) to prevent email spam.
+
+### 3.2 Tournament & Venue Configuration
+Logic:
+- Admins define Tournaments, Venues, Categories (e.g., Athlete, Media), and Zones 
+  (e.g., Pitch, VIP Lounge).
+- The "Access Matrix": Admins link Categories to Zones using the `ZoneAccess` table.
+  (e.g., Category "Athlete" is granted access to Zone "Locker Room").
+- When a ZoneAccess rule is updated, the system automatically invalidates the Redis 
+  scanner cache for that zone so updates take effect at the gates instantly.
+
+### 3.3 Application Submission & Document Uploads
+Logic:
+- Media Uploads: Frontend requests a pre-signed URL from the backend. The backend 
+  generates an AWS S3 pre-signed POST URL. The frontend uploads the heavy image/PDF 
+  directly to S3, bypassing the FastAPI server to save bandwidth.
+- Submission: An `applicant` submits their data. The backend verifies they do not 
+  already have a pending application to prevent duplicates.
+- Delegation Submission: An `org_admin` is exempt from the duplicate check. They 
+  can submit infinite applications on behalf of their team. The backend records 
+  the `user_id` as the "Submitter" and stores the participant's name separately.
+
+### 3.4 Application Review & Audit Trail
+Logic:
+- An `officer` fetches paginated, filterable applications (by status, category, etc.).
+- The officer updates the status (e.g., "pending" -> "approved") via a PATCH request.
+- Audit Logging: The system detects the status change and automatically creates a 
+  record in the `AuditLog` table, tracking who made the change, the old status, 
+  the new status, and the timestamp.
+- Email Notification: If the status is "approved", a Celery background task is 
+  dispatched to send an AWS SES email congratulating the participant.
+
+### 3.5 Participant & Badge Generation
+Logic:
+- Participant Creation: An approved Application is converted into a `Participant`. 
+  The system auto-derives their role (e.g., Category "Media" -> Role "media") if 
+  not explicitly provided.
+- Badge Generation (Single or Batch):
+  1. The system generates a unique serial number (e.g., ACCRA-A1B2C3D4).
+  2. Cryptographic Signature (Zero-Trust): The system concatenates the participant ID 
+     and serial number, and hashes it using HMAC-SHA256 and the server's SECRET_KEY.
+  3. The badge is saved to the database as "active".
+  4. PDF Generation: ReportLab generates a CR80-sized (2.125 x 3.375 inch) PDF. 
+     It fetches the user's photo from S3, prints their name/category, and embeds 
+     a QR code containing the Participant ID, Serial, and HMAC Signature.
+  5. Celery dispatches an email to the user with a link to download their PDF badge.
+- Badge Revocation: Admins can change a badge status to "revoked". This instantly 
+  triggers a wildcard Redis delete (`scan:{participant_id}:*`) to wipe their access 
+  from all venue gates worldwide in milliseconds.
+
+### 3.6 Scanner System & Access Control
+Logic:
+When a Scanner Operator scans a QR code at a Zone, the following strictly ordered 
+checks occur in under 300ms:
+
+  Step 1. Rate Limiting: Redis ensures the scanner device isn't spamming the API 
+          (max 10 scans per 10 seconds).
+  Step 2. Cryptographic Check (Zero-Trust): The server re-calculates the HMAC-SHA256 
+          signature using the scanned ID and Serial. If it doesn't match the scanned 
+          signature, the badge is a forgery. Access is instantly DENIED.
+  Step 3. Redis Cache Check: The server checks `scan:{participant_id}:{zone_id}`. 
+          If found, it returns the cached GRANTED/DENIED response instantly.
+  Step 4. Database Fallback (Cache Miss): The server queries PostgreSQL. It checks if:
+          a) The participant exists.
+          b) The linked application status is "approved".
+          c) The participant's Category is linked to the requested Zone in `ZoneAccess`.
+  Step 5. Cache & Log: The final result is cached in Redis for 5 minutes. The attempt
+          is permanently saved in the `ScanLog` table along with the scanning direction
+          (IN or OUT) for security auditing and live capacity tracking.
+
+### 3.7 Directional Scanning & Zone Capacity Tracking
+Logic:
+- The Scanner App includes a "direction" (IN or OUT) with every scan request.
+- The system logs this direction into the `ScanLog` table.
+- The `/zones/{zone_id}/capacity` endpoint aggregates all GRANTED 'IN' scans and 
+  subtracts 'OUT' scans to deliver a real-time live capacity count for crowd control.
+
+### 3.8 Live Security Alerts (WebSockets)
+Logic:
+- If a scan results in "DENIED" (due to forgery, revoked badge, or wrong zone), 
+  the server publishes a JSON alert to the Redis `scan_alerts` channel.
+- The Admin Dashboard connects to a FastAPI WebSocket (`/live-alerts`).
+- WebSocket Auth: The connection is secured by passing the JWT token in the URL 
+  query parameters. The server decodes it and verifies the Admin role before accepting.
+- Redis Pub/Sub pushes the alert through the WebSocket, popping up a live notification 
+  on the Admin's screen.
+
+### 3.9 Dashboards & Reporting
+Logic:
+- The `/stats` endpoint uses optimized PostgreSQL aggregations (`func.count()`) to 
+  calculate total applications, approved vs pending counts, and total granted/denied 
+  scans in real-time.
+- All GET list endpoints (Applications, Participants, Organizations) return a unified 
+  wrapper `{"total": int, "items": [...]}` to support frontend pagination.
+
+
+4. INFRASTRUCTURE & DEPLOYMENT (AWS)
+-------------------------------------------------------------------------------
+The system is built to scale horizontally and handle thousands of concurrent users:
+
+- Amazon Route 53 & ACM: Manages custom domains and SSL certificates.
+- Application Load Balancer (ALB): Routes HTTPS traffic. Listener rules explicitly 
+  block raw AWS URLs (returning 403 Forbidden) and enforce custom domain usage.
+- Amazon ECS (Fargate): Serverless container orchestration. Runs the FastAPI web 
+  server and the Celery background workers.
+- Amazon RDS (PostgreSQL): Stateful, relational database.
+- Amazon ElastiCache (Redis OSS): Cluster-mode disabled node to natively support 
+  Celery queues, scanner caching, rate-limiting, and Pub/Sub.
+- Amazon S3: Secure, private storage for participant photos.
+- Amazon SES: Transactional email service for invites and notifications.
+
+Data Management:
+- Database migrations are generated locally via Alembic and executed securely in 
+  production using ECS "Run Task".
+- A custom `clear_mock_data.py` script utilizes `TRUNCATE ... CASCADE` to safely 
+  wipe transactional test data while preserving Admin accounts for production readiness.
+
+===============================================================================
+END OF DOCUMENTATION
+===============================================================================

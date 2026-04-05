@@ -5,6 +5,7 @@ import logging
 import asyncio
 import time
 from celery import Celery
+from celery.schedules import crontab
 from celery.signals import worker_process_init
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
@@ -26,6 +27,12 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     enable_utc=True,
+    beat_schedule={
+        "daily-gdpr-scrub": {
+            "task": "scrub_gdpr_data",
+            "schedule": crontab(hour=0, minute=0),  # Runs daily at Midnight UTC
+        }
+    }
 )
 
 # Only apply SSL configurations if the URL actually uses the rediss:// scheme (e.g. AWS ElastiCache)
@@ -131,3 +138,78 @@ def send_email_notification(self, recipient_email: str, subject: str, body: str)
         logger.error(f"Failed to send email to {recipient_email}: {exc}")
         # Retry the task in 60 seconds in case of transient network issues
         raise self.retry(exc=exc, countdown=60)
+
+@celery_app.task(name="scrub_gdpr_data", bind=True)
+def scrub_gdpr_data(self, days_after_end: int = 30):
+    """Scheduled task to permanently delete PII and S3 documents after a tournament ends."""
+    logger.info(f"Starting GDPR data scrubbing task for tournaments ended {days_after_end} days ago...")
+    
+    async def run_scrub(days):
+        from datetime import timedelta
+        from sqlalchemy.orm import sessionmaker, selectinload
+        from sqlalchemy import select
+        from sqlalchemy.ext.asyncio import AsyncSession
+        from app.models.application import Application
+        from app.models.participant import Participant
+        from app.models.tournament import Tournament
+        
+        engine = create_async_engine(settings.DATABASE_URL)
+        AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        
+        s3_client = boto3.client(
+            "s3", aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY, region_name=settings.AWS_REGION
+        )
+        s3_prefix = f"https://{settings.S3_BUCKET_NAME}.s3.{settings.AWS_REGION}.amazonaws.com/"
+
+        async with AsyncSessionLocal() as session:
+            # Find applications for tournaments that ended more than 30 days ago
+            cutoff_date = datetime.now(timezone.utc).date() - timedelta(days=days)
+            
+            stmt = (
+                select(Application)
+                .join(Participant, Participant.application_id == Application.id)
+                .join(Tournament, Participant.tournament_id == Tournament.id)
+                .options(selectinload(Application.documents))
+                .where(Tournament.end_date <= cutoff_date)
+                .where(Application.is_gdpr_scrubbed == False)
+            )
+            
+            applications = (await session.execute(stmt)).scalars().all()
+            scrub_count = 0
+            
+            for app in applications:
+                keys_to_delete = []
+                
+                if app.photo_url and app.photo_url.startswith(s3_prefix):
+                    keys_to_delete.append({"Key": app.photo_url.replace(s3_prefix, "")})
+                
+                for doc in app.documents:
+                    if doc.file_url and doc.file_url.startswith(s3_prefix):
+                        keys_to_delete.append({"Key": doc.file_url.replace(s3_prefix, "")})
+                        doc.file_url = "REDACTED"
+                
+                # 1. Permanently delete images/documents from AWS S3
+                if keys_to_delete and settings.S3_BUCKET_NAME:
+                    try:
+                        s3_client.delete_objects(Bucket=settings.S3_BUCKET_NAME, Delete={"Objects": keys_to_delete})
+                    except Exception as e:
+                        logger.error(f"S3 deletion failed for App {app.id}: {e}")
+                
+                # 2. Scrub PII from PostgreSQL
+                app.first_name = "REDACTED"
+                app.last_name = "REDACTED"
+                app.email = f"redacted_{app.id}@example.com"
+                app.photo_url = None
+                app.dob = None
+                app.gender = None
+                app.is_gdpr_scrubbed = True
+                scrub_count += 1
+                
+            if scrub_count > 0:
+                await session.commit()
+                logger.info(f"Successfully scrubbed {scrub_count} applications for GDPR compliance.")
+            else:
+                logger.info("No applications found needing GDPR scrubbing today.")
+                
+    asyncio.run(run_scrub(days_after_end))

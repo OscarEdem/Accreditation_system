@@ -11,12 +11,14 @@ from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
+from redis.asyncio import Redis
 from app.config.settings import settings
 from app.models.badge import Badge
 
 class BadgeService:
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, redis: Redis | None = None):
         self.session = session
+        self.redis = redis
 
     def generate_signature(self, participant_id: str, serial_number: str) -> str:
         """Generates an HMAC SHA-256 signature for the badge data."""
@@ -66,6 +68,23 @@ class BadgeService:
         except IntegrityError:
             await self.session.rollback()
             raise ValueError("One or more participants already have badges.")
+
+    async def update_badge_status(self, badge_id: uuid.UUID, status: str) -> Badge:
+        badge = await self.session.get(Badge, badge_id)
+        if not badge:
+            raise ValueError("Badge not found")
+        badge.status = status
+        await self.session.commit()
+        await self.session.refresh(badge)
+        
+        # Instantly invalidate scanner cache for this participant
+        if self.redis:
+            cache_pattern = f"auth:{badge.participant_id}:*"
+            keys = await self.redis.keys(cache_pattern)
+            if keys:
+                await self.redis.delete(*keys)
+                
+        return badge
 
     def generate_qr_code(self, badge: Badge) -> str:
         """Generates a base64 encoded PNG of the QR code."""

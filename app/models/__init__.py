@@ -15,3 +15,4 @@ from app.models.badge import Badge
 from app.models.scan_log import ScanLog
 from app.models.zone_access import ZoneAccess
 from app.models.audit_log import AuditLog
+from app.models.document import Document

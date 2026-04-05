@@ -1,11 +1,14 @@
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 from app.models.application import Application
 from app.schemas.application import ApplicationCreate, ApplicationReview
 from app.models.user import User
 from app.models.audit_log import AuditLog
+from app.models.document import Document
+from app.schemas.document import DocumentReview
 
 class ApplicationService:
     def __init__(self, session: AsyncSession):
@@ -19,11 +22,18 @@ class ApplicationService:
             if existing.scalars().first():
                 raise HTTPException(status_code=400, detail="You have already submitted an application.")
 
-        application = Application(**application_in.model_dump())
+        app_data = application_in.model_dump(exclude={"documents"})
+        application = Application(**app_data)
         self.session.add(application)
+        await self.session.flush()
+
+        if application_in.documents:
+            docs = [Document(**doc.model_dump(), application_id=application.id) for doc in application_in.documents]
+            self.session.add_all(docs)
+            
         await self.session.commit()
-        await self.session.refresh(application)
-        return application
+        stmt = select(Application).options(selectinload(Application.documents)).where(Application.id == application.id)
+        return (await self.session.execute(stmt)).scalar_one()
 
     async def get_applications(
         self, 
@@ -32,12 +42,13 @@ class ApplicationService:
         category: str | None = None,
         organization_id: uuid.UUID | None = None,
         skip: int = 0, 
-        limit: int = 100,
+        limit: int | None = 100,
         sort_desc: bool = True
     ) -> tuple[list[dict], int]:
         count_stmt = select(func.count(Application.id))
         stmt = (
             select(Application, User.first_name, User.last_name)
+            .options(selectinload(Application.documents))
             .join(User, Application.user_id == User.id)
         )
         
@@ -61,18 +72,23 @@ class ApplicationService:
         else:
             stmt = stmt.order_by(Application.submitted_at.asc())
 
-        stmt = stmt.offset(skip).limit(limit)
+        stmt = stmt.offset(skip)
+        if limit is not None:
+            stmt = stmt.limit(limit)
+            
         result = await self.session.execute(stmt)
         
         applications = []
         for app, first_name, last_name in result.all():
             app_dict = {c.name: getattr(app, c.name) for c in app.__table__.columns}
             app_dict["submitter_name"] = f"{first_name} {last_name}"
+            app_dict["documents"] = app.documents
             applications.append(app_dict)
         return applications, total
 
     async def get_application_by_id(self, application_id: uuid.UUID) -> Application:
-        application = await self.session.get(Application, application_id)
+        stmt = select(Application).options(selectinload(Application.documents)).where(Application.id == application_id)
+        application = (await self.session.execute(stmt)).scalar_one_or_none()
         if not application:
             raise HTTPException(status_code=404, detail="Application not found")
         return application
@@ -100,3 +116,24 @@ class ApplicationService:
         await self.session.commit()
         await self.session.refresh(application)
         return application
+
+    async def review_document(self, document_id: uuid.UUID, reviewer_id: uuid.UUID, review_data: DocumentReview) -> Document:
+        document = await self.session.get(Document, document_id)
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        document.status = review_data.status
+        document.rejection_reason = review_data.rejection_reason
+        
+        audit_log = AuditLog(
+            entity_type="document",
+            entity_id=document.id,
+            action="document_status_change",
+            new_value=review_data.status,
+            user_id=reviewer_id
+        )
+        self.session.add(audit_log)
+        
+        await self.session.commit()
+        await self.session.refresh(document)
+        return document

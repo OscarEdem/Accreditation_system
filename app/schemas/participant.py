@@ -1,15 +1,28 @@
 import uuid
 from datetime import datetime
-from typing import List
+from enum import Enum
+from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
+
+class ParticipantRole(str, Enum):
+    athlete = "athlete"
+    team_official = "team_official"
+    match_official = "match_official"
+    media = "media"
+    medical = "medical"
+    security = "security"
+    vip = "vip"
+    staff = "staff"
 
 class ParticipantBase(BaseModel):
     application_id: uuid.UUID
     tournament_id: uuid.UUID
-    role: str
+    role: ParticipantRole
 
-class ParticipantCreate(ParticipantBase):
-    pass
+class ParticipantCreate(BaseModel):
+    application_id: uuid.UUID
+    tournament_id: uuid.UUID
+    role: Optional[ParticipantRole] = None  # Will auto-set based on Application Category if not provided
 
 class ParticipantRead(ParticipantBase):
     id: uuid.UUID

@@ -1,11 +1,12 @@
-import uuid
+alsimport uuid
 import jwt
+import secrets
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException
 from app.models.user import User
-from app.schemas.user import UserCreate
+from app.schemas.user import UserCreate, UserInvite
 from app.core.security import get_password_hash, verify_password
 from app.config.settings import settings
 
@@ -36,6 +37,22 @@ class UserService:
         await self.session.refresh(user)
         return user
 
+    async def invite_user(self, user_in: UserInvite) -> User:
+        if await self.get_user_by_email(user_in.email):
+            raise HTTPException(status_code=400, detail="Email already registered")
+        
+        user_data = user_in.model_dump()
+        
+        # Generate a strong, unusable random password. The user will set their own via the invite link.
+        dummy_password = secrets.token_urlsafe(32)
+        
+        user = User(**user_data, password_hash=get_password_hash(dummy_password))
+        
+        self.session.add(user)
+        await self.session.commit()
+        await self.session.refresh(user)
+        return user
+
     def create_password_reset_token(self, email: str) -> str:
         expire = datetime.now(timezone.utc) + timedelta(hours=1)
         to_encode = {"exp": expire, "sub": email, "type": "password_reset"}
@@ -50,6 +67,32 @@ class UserService:
         except jwt.InvalidTokenError:
             return None
 
+    def create_invite_token(self, email: str) -> str:
+        # Invite tokens are valid for 24 hours
+        expire = datetime.now(timezone.utc) + timedelta(hours=24)
+        to_encode = {"exp": expire, "sub": email, "type": "invite"}
+        return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+    def verify_invite_token(self, token: str) -> str | None:
+        try:
+            decoded = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+            if decoded.get("type") != "invite":
+                return None
+            return decoded.get("sub")
+        except jwt.InvalidTokenError:
+            return None
+
+    async def accept_invite(self, token: str, new_password: str) -> bool:
+        email = self.verify_invite_token(token)
+        if not email:
+            return False
+        user = await self.get_user_by_email(email)
+        if not user:
+            return False
+        user.password_hash = get_password_hash(new_password)
+        await self.session.commit()
+        return True
+    
     async def reset_password(self, token: str, new_password: str) -> bool:
         email = self.verify_password_reset_token(token)
         if not email:
