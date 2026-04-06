@@ -1,3 +1,4 @@
+import uuid
 from datetime import timedelta
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -40,13 +41,57 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    # Generate a unique session ID and store it in Redis as the active session
+    session_id = str(uuid.uuid4())
+    # Using get_redis directly requires managing the generator manually in this non-dependency context, 
+    # but it's cleaner to inject it as a dependency:
+
+@router.post("/login", response_model=Token)
+async def login_for_access_token(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    service: UserService = Depends(get_user_service),
+    redis: Redis = Depends(get_redis)
+):
+    user = await service.authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is deactivated.")
+
+    # Generate a unique session ID and store it in Redis as the active session
+    session_id = str(uuid.uuid4())
+    await redis.set(f"active_session:{user.id}", session_id, ex=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+    
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(data={"sub": user.email}, expires_delta=access_token_expires)
+    access_token = create_access_token(data={"sub": user.email, "session_id": session_id}, expires_delta=access_token_expires)
     return Token(access_token=access_token, token_type="bearer")
 
 @router.get("/me", response_model=UserRead)
 async def read_users_me(current_user: Annotated[User, Depends(get_current_user)]):
     return current_user
+
+@router.post("/logout")
+async def logout(
+    current_user: Annotated[User, Depends(get_current_user)],
+    redis: Redis = Depends(get_redis)
+):
+    await redis.delete(f"active_session:{current_user.id}")
+    return {"message": "Successfully logged out."}
+
+@router.post("/force-logout/{user_id}")
+async def force_logout_user(
+    user_id: uuid.UUID,
+    current_user: Annotated[User, Depends(allow_admin)],
+    redis: Redis = Depends(get_redis)
+):
+    """Allows an Admin to instantly terminate a specific user's active session."""
+    await redis.delete(f"active_session:{user_id}")
+    return {"message": f"User session for {user_id} has been forcefully terminated."}
 
 @router.post("/forgot-password")
 async def forgot_password(
@@ -65,7 +110,7 @@ async def forgot_password(
     user = await service.get_user_by_email(request.email)
     if user:
         token = service.create_password_reset_token(user.email)
-        reset_link = f"https://accra2026.com/reset-password?token={token}"
+        reset_link = f"{settings.FRONTEND_URL}/reset-password?token={token}"
         send_email_notification.delay(
             recipient_email=user.email,
             subject="Accra 2026 - Password Reset Request",
@@ -88,8 +133,8 @@ async def invite_user(
     user = await service.invite_user(user_in)
     
     token = service.create_invite_token(user.email)
-    invite_link = f"https://accra2026.com/accept-invite?token={token}"
-    resend_link = f"https://accra2026.com/resend-invite"
+    invite_link = f"{settings.FRONTEND_URL}/accept-invite?token={token}"
+    resend_link = f"{settings.FRONTEND_URL}/resend-invite"
     
     send_email_notification.delay(
         recipient_email=user.email,
@@ -126,7 +171,7 @@ async def resend_invite(
     user = await service.get_user_by_email(request.email)
     if user:
         token = service.create_invite_token(user.email)
-        invite_link = f"https://accra2026.com/accept-invite?token={token}"
+        invite_link = f"{settings.FRONTEND_URL}/accept-invite?token={token}"
         
         send_email_notification.delay(
             recipient_email=user.email,

@@ -3,9 +3,11 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
+from redis.asyncio import Redis
 
 from app.config.settings import settings
 from app.db.session import get_db
+from app.db.redis import get_redis
 from app.models.user import User
 from app.services.user import UserService
 
@@ -13,7 +15,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis)
 ) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -23,7 +26,8 @@ async def get_current_user(
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         email: str | None = payload.get("sub")
-        if email is None:
+        session_id: str | None = payload.get("session_id")
+        if email is None or session_id is None:
             raise credentials_exception
     except jwt.InvalidTokenError:
         raise credentials_exception
@@ -31,6 +35,15 @@ async def get_current_user(
     user = await UserService(db).get_user_by_email(email)
     if user is None:
         raise credentials_exception
+        
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is deactivated.")
+        
+    # Verify this token belongs to the currently active session in Redis
+    active_session = await redis.get(f"active_session:{user.id}")
+    if not active_session or active_session != session_id:
+        raise credentials_exception
+        
     return user
 
 class RoleChecker:

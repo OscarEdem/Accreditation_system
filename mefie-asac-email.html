@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Welcome to ASAC 2026 Accreditation Portal</title>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background-color: #0d1520;
+      font-family: 'Barlow', sans-serif;
+      padding: 32px 16px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .email-wrapper {
+      max-width: 620px;
+      margin: 0 auto;
+    }
+
+    /* ── Card ── */
+    .email-card {
+      background: #ffffff;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 8px 40px rgba(0,0,0,.5);
+    }
+
+    /* ── Header ── */
+    .email-header {
+      background: #0b1622;
+      padding: 24px 48px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      border-bottom: 2px solid #f0a500;
+    }
+
+    .logo-icon { width: 42px; height: 42px; flex-shrink: 0; }
+
+    .logo-text-block { display: flex; flex-direction: column; gap: 2px; }
+
+    .logo-wordmark {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 22px;
+      font-weight: 900;
+      color: #ffffff;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      line-height: 1;
+    }
+
+    .logo-wordmark span { color: #f0a500; }
+
+    .logo-sub {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #5a7090;
+    }
+
+    /* ── Body ── */
+    .email-body {
+      padding: 40px 48px 48px;
+      background: #ffffff;
+    }
+
+    .headline {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 40px;
+      font-weight: 900;
+      line-height: 1.1;
+      margin-bottom: 24px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .headline .dark { color: #0b1622; }
+    .headline .gold { color: #f0a500; }
+
+    .greeting {
+      font-size: 15px;
+      color: #455368;
+      margin-bottom: 12px;
+      font-weight: 500;
+    }
+
+    .intro-text {
+      font-size: 15px;
+      color: #455368;
+      line-height: 1.7;
+      margin-bottom: 36px;
+    }
+
+    /* ── Section title ── */
+    .section-title {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      color: #0b1622;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+
+    .confirm-text {
+      font-size: 15px;
+      color: #455368;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    /* ── URL / CTA box ── */
+    .url-box {
+      background: #0b1622;
+      border: 2px solid #f0a500;
+      border-radius: 10px;
+      padding: 28px 24px;
+      text-align: center;
+      margin-bottom: 14px;
+    }
+
+    .url-display {
+      font-size: 12px;
+      color: #4a6080;
+      word-break: break-all;
+      margin-bottom: 20px;
+      letter-spacing: 0.2px;
+      line-height: 1.6;
+    }
+
+    .url-btn {
+      display: inline-block;
+      background: #f0a500;
+      color: #0b1622;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 16px;
+      font-weight: 900;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      text-decoration: none;
+      padding: 13px 38px;
+      border-radius: 6px;
+    }
+
+    .url-hint {
+      font-size: 13px;
+      color: #94a3b8;
+      margin-bottom: 32px;
+      line-height: 1.6;
+    }
+
+    /* ── Warning box ── */
+    .warning-box {
+      background: #fff8e6;
+      border-left: 4px solid #f0a500;
+      border-radius: 0 10px 10px 0;
+      padding: 20px 22px;
+      margin-bottom: 36px;
+    }
+
+    .warning-title {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 17px;
+      font-weight: 800;
+      color: #0b1622;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .warning-subtitle {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #b87d00;
+      margin-bottom: 6px;
+    }
+
+    .warning-body {
+      font-size: 13.5px;
+      color: #555;
+      line-height: 1.6;
+    }
+
+    /* ── Help section ── */
+    .help-title {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      color: #0b1622;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 14px;
+    }
+
+    .help-text {
+      font-size: 14.5px;
+      color: #455368;
+      line-height: 1.65;
+      margin-bottom: 10px;
+    }
+
+    .help-text strong { color: #0b1622; font-weight: 700; }
+
+    .help-text a {
+      color: #f0a500;
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    /* ── Footer ── */
+    .email-footer {
+      background: #0b1622;
+      padding: 28px 48px;
+      text-align: center;
+      border-top: 2px solid #f0a500;
+    }
+
+    .footer-notice {
+      font-size: 13px;
+      color: #5a7090;
+      line-height: 1.6;
+      margin-bottom: 4px;
+    }
+
+    .footer-support-link {
+      font-size: 13px;
+      color: #f0a500;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .footer-divider {
+      border: none;
+      border-top: 1px solid #1e3050;
+      margin: 18px 0;
+    }
+
+    .social-icons {
+      display: flex;
+      justify-content: center;
+      gap: 14px;
+    }
+
+    .social-icon {
+      width: 38px;
+      height: 38px;
+      background: #172640;
+      border: 1px solid #1e3050;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+    }
+
+    .social-icon svg { width: 17px; height: 17px; fill: #5a7090; }
+
+    /* ── Responsive ── */
+    @media (max-width: 480px) {
+      .email-header,
+      .email-body,
+      .email-footer { padding-left: 24px; padding-right: 24px; }
+      .headline { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+<div class="email-wrapper">
+  <div class="email-card">
+
+    <!-- Header -->
+    <div class="email-header">
+      <!-- Running athlete SVG logo -->
+      <svg class="logo-icon" viewBox="0 0 42 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="28" cy="7" r="4" fill="#f0a500"/>
+        <path d="M28 11 L22 22 L14 30" stroke="#f0a500" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M25 16 L32 12" stroke="#f0a500" stroke-width="2.8" stroke-linecap="round"/>
+        <path d="M24 19 L17 15" stroke="#f0a500" stroke-width="2.8" stroke-linecap="round"/>
+        <path d="M22 22 L29 30" stroke="#f0a500" stroke-width="2.8" stroke-linecap="round"/>
+        <line x1="4" y1="37" x2="38" y2="37" stroke="#f0a500" stroke-width="2.2" stroke-linecap="round" opacity=".35"/>
+        <line x1="4" y1="33" x2="38" y2="33" stroke="#f0a500" stroke-width="1" stroke-linecap="round" opacity=".15"/>
+      </svg>
+
+      <div class="logo-text-block">
+        <span class="logo-wordmark">ASAC <span>2026</span></span>
+        <span class="logo-sub">Official Accreditation Portal</span>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="email-body">
+
+      <h1 class="headline">
+        <span class="dark">WELCOME TO, </span><span class="gold">ASAC 2026!</span>
+      </h1>
+
+      <p class="greeting">Hello Calvin,</p>
+
+      <p class="intro-text">
+        We're thrilled to have you on board. Discover your all-in-one platform for managing
+        your accreditation for the African Senior Athletics Championships 2026 — upload
+        documents, track your application status, and collect your official badge.
+      </p>
+
+      <!-- Confirm section -->
+      <h2 class="section-title">Confirm it's you</h2>
+      <p class="confirm-text">
+        Click the button below to verify your email address and activate your accreditation
+        portal account. This link expires in 24 hours.
+      </p>
+
+      <!-- URL / Button box -->
+      <div class="url-box">
+        <p class="url-display">https://accreditation.asac2026.org/verify?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.abc123...</p>
+        <a href="https://accreditation.asac2026.org/verify" class="url-btn">Verify My Account →</a>
+      </div>
+
+      <p class="url-hint">Or copy and paste the link above into your browser. This link expires in 24 hours.</p>
+
+      <!-- Warning -->
+      <div class="warning-box" role="alert">
+        <p class="warning-title">Don't share this link with anyone</p>
+        <p class="warning-subtitle">If someone asks for this link</p>
+        <p class="warning-body">
+          Don't share this verification link with anyone, especially if they claim to work for
+          ASAC 2026. They may be trying to gain unauthorized access to your account.
+        </p>
+      </div>
+
+      <!-- Help -->
+      <h2 class="help-title">Need help?</h2>
+      <p class="help-text">
+        <strong>Didn't request this?</strong> If you received this email but did not register
+        for an accreditation account, please ignore this email.
+      </p>
+      <p class="help-text">
+        If you need assistance, please contact our support team at
+        <a href="mailto:accreditation@asac2026.org">accreditation@asac2026.org</a>
+      </p>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="email-footer">
+      <p class="footer-notice">
+        If you are not the intended recipient, please ignore this mail or contact us on
+      </p>
+      <a href="mailto:accreditation@asac2026.org" class="footer-support-link">accreditation@asac2026.org</a>
+
+      <hr class="footer-divider"/>
+
+      <div class="social-icons">
+        <a href="#" class="social-icon" aria-label="Facebook">
+          <svg viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+        </a>
+        <a href="#" class="social-icon" aria-label="X">
+          <svg viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        </a>
+        <a href="#" class="social-icon" aria-label="Instagram">
+          <svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4" fill="#0b1622"/><circle cx="17.5" cy="6.5" r="1.2" fill="#0b1622"/></svg>
+        </a>
+        <a href="#" class="social-icon" aria-label="TikTok">
+          <svg viewBox="0 0 24 24"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34v-6.9a8.16 8.16 0 0 0 4.77 1.52V6.49a4.85 4.85 0 0 1-1-.2z"/></svg>
+        </a>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

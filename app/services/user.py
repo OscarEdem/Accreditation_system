@@ -121,3 +121,13 @@ class UserService:
         await self.session.commit()
         await self.session.refresh(user)
         return user
+
+    async def update_user_status(self, user_id: uuid.UUID, is_active: bool) -> User:
+        user = await self.session.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        user.is_active = is_active
+        await self.session.commit()
+        await self.session.refresh(user)
+        return user

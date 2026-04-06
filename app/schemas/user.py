@@ -16,6 +16,7 @@ class UserBase(BaseModel):
     last_name: str
     email: EmailStr
     role: UserRole = UserRole.applicant
+    is_active: bool = True
 
 class UserCreate(UserBase):
     password: str
@@ -29,6 +30,9 @@ class UserRead(UserBase):
 class UserUpdateRole(BaseModel):
     role: UserRole
     organization_id: uuid.UUID | None = None
+
+class UserUpdateStatus(BaseModel):
+    is_active: bool
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr

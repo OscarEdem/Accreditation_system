@@ -1,0 +1,138 @@
+import re
+
+def generate_html_email(subject: str, text_body: str) -> str:
+    """
+    Converts a plain-text email body into a beautiful ASAC 2026 HTML template.
+    Automatically extracts URLs to create prominent action buttons.
+    """
+    # Find the first URL in the text body to use for the main button
+    urls = re.findall(r'(https?://[^\s]+)', text_body)
+    main_url = urls[0] if urls else None
+    
+    # Convert plain text newlines into HTML line breaks
+    html_content = text_body.replace('\n', '<br>')
+    
+    button_html = ""
+    if main_url:
+        button_html = f"""
+        <div class="url-box">
+          <p class="url-display">{main_url}</p>
+          <a href="{main_url}" class="url-btn">Access Link &rarr;</a>
+        </div>
+        <p class="url-hint">Or copy and paste the link above into your browser.</p>
+        
+        <div class="warning-box" role="alert">
+          <p class="warning-title">Security Notice</p>
+          <p class="warning-body">
+            Please do not share this link with anyone. It provides secure access to your ASAC 2026 account.
+          </p>
+        </div>
+        """
+
+    template = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>___SUBJECT___</title>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background-color: #0d1520;
+      font-family: 'Barlow', sans-serif;
+      padding: 32px 16px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .email-wrapper { max-width: 620px; margin: 0 auto; }
+    .email-card { background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,.5); }
+    .email-header { background: #0b1622; padding: 24px 48px; display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #f0a500; }
+    .logo-icon { width: 42px; height: 42px; flex-shrink: 0; }
+    .logo-text-block { display: flex; flex-direction: column; gap: 2px; }
+    .logo-wordmark { font-family: 'Barlow Condensed', sans-serif; font-size: 22px; font-weight: 900; color: #ffffff; letter-spacing: 2px; text-transform: uppercase; line-height: 1; }
+    .logo-wordmark span { color: #f0a500; }
+    .logo-sub { font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #5a7090; }
+    .email-body { padding: 40px 48px 48px; background: #ffffff; }
+    .headline { font-family: 'Barlow Condensed', sans-serif; font-size: 40px; font-weight: 900; line-height: 1.1; margin-bottom: 8px; letter-spacing: 0.5px; text-transform: uppercase; }
+    .headline .dark { color: #0b1622; }
+    .headline .gold { color: #f0a500; }
+    .subject-line { font-size: 16px; color: #f0a500; font-weight: 700; margin-bottom: 24px; text-transform: uppercase; letter-spacing: 1px;}
+    .intro-text { font-size: 15px; color: #455368; line-height: 1.7; margin-bottom: 36px; }
+    .url-box { background: #0b1622; border: 2px solid #f0a500; border-radius: 10px; padding: 28px 24px; text-align: center; margin-bottom: 14px; }
+    .url-display { font-size: 12px; color: #4a6080; word-break: break-all; margin-bottom: 20px; letter-spacing: 0.2px; line-height: 1.6; }
+    .url-btn { display: inline-block; background: #f0a500; color: #0b1622; font-family: 'Barlow Condensed', sans-serif; font-size: 16px; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; text-decoration: none; padding: 13px 38px; border-radius: 6px; }
+    .url-hint { font-size: 13px; color: #94a3b8; margin-bottom: 32px; line-height: 1.6; text-align: center; }
+    .warning-box { background: #fff8e6; border-left: 4px solid #f0a500; border-radius: 0 10px 10px 0; padding: 20px 22px; margin-bottom: 36px; }
+    .warning-title { font-family: 'Barlow Condensed', sans-serif; font-size: 17px; font-weight: 800; color: #0b1622; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .warning-body { font-size: 13.5px; color: #555; line-height: 1.6; }
+    .help-title { font-family: 'Barlow Condensed', sans-serif; font-size: 22px; font-weight: 800; color: #0b1622; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 14px; }
+    .help-text { font-size: 14.5px; color: #455368; line-height: 1.65; margin-bottom: 10px; }
+    .help-text a { color: #f0a500; font-weight: 600; text-decoration: none; }
+    .email-footer { background: #0b1622; padding: 28px 48px; text-align: center; border-top: 2px solid #f0a500; }
+    .footer-notice { font-size: 13px; color: #5a7090; line-height: 1.6; margin-bottom: 4px; }
+    .footer-support-link { font-size: 13px; color: #f0a500; text-decoration: none; font-weight: 600; }
+    @media (max-width: 480px) { .email-header, .email-body, .email-footer { padding-left: 24px; padding-right: 24px; } .headline { font-size: 28px; } }
+  </style>
+</head>
+<body>
+<div class="email-wrapper">
+  <div class="email-card">
+    <!-- Header -->
+    <div class="email-header">
+      <svg class="logo-icon" viewBox="0 0 42 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="28" cy="7" r="4" fill="#f0a500"/>
+        <path d="M28 11 L22 22 L14 30" stroke="#f0a500" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M25 16 L32 12" stroke="#f0a500" stroke-width="2.8" stroke-linecap="round"/>
+        <path d="M24 19 L17 15" stroke="#f0a500" stroke-width="2.8" stroke-linecap="round"/>
+        <path d="M22 22 L29 30" stroke="#f0a500" stroke-width="2.8" stroke-linecap="round"/>
+        <line x1="4" y1="37" x2="38" y2="37" stroke="#f0a500" stroke-width="2.2" stroke-linecap="round" opacity=".35"/>
+        <line x1="4" y1="33" x2="38" y2="33" stroke="#f0a500" stroke-width="1" stroke-linecap="round" opacity=".15"/>
+      </svg>
+      <div class="logo-text-block">
+        <span class="logo-wordmark">ASAC <span>2026</span></span>
+        <span class="logo-sub">Official Accreditation Portal</span>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="email-body">
+      <h1 class="headline">
+        <span class="dark">ASAC </span><span class="gold">2026</span>
+      </h1>
+      <div class="subject-line">___SUBJECT___</div>
+
+      <p class="intro-text">
+        ___HTML_CONTENT___
+      </p>
+
+      ___BUTTON_HTML___
+
+      <!-- Help -->
+      <h2 class="help-title">Need help?</h2>
+      <p class="help-text">
+        If you received this email but did not register for an accreditation account, please ignore this email.
+      </p>
+      <p class="help-text">
+        If you need assistance, please contact our support team at
+        <a href="mailto:accreditation@asac2026.org">accreditation@asac2026.org</a>
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <div class="email-footer">
+      <p class="footer-notice">
+        If you are not the intended recipient, please ignore this mail or contact us on
+      </p>
+      <a href="mailto:accreditation@asac2026.org" class="footer-support-link">accreditation@asac2026.org</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>
+"""
+    
+    html = template.replace("___HTML_CONTENT___", html_content)
+    html = html.replace("___BUTTON_HTML___", button_html)
+    html = html.replace("___SUBJECT___", subject)
+    
+    return html

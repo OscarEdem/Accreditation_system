@@ -15,6 +15,7 @@ from app.models.participant import Participant
 from app.models.application import Application
 from app.models.badge import Badge
 from app.workers.main import send_email_notification
+from app.config.settings import settings
 
 router = APIRouter()
 
@@ -49,7 +50,7 @@ async def generate_badge(
     row = (await db.execute(stmt)).first()
     if row:
         first_name, email = row
-        download_link = f"https://fasigms.africa/badges/download/{participant_id}" # Replace with actual frontend URL
+        download_link = f"{settings.FRONTEND_URL}/badges/download/{participant_id}"
         send_email_notification.delay(
             recipient_email=email,
             subject="Your ACCRA 2026 Badge is Ready!",
@@ -83,7 +84,7 @@ async def generate_badges_batch(
     )
     rows = (await db.execute(stmt)).all()
     for pid, first_name, email in rows:
-        download_link = f"https://fasigms.africa/badges/download/{pid}" # Replace with actual frontend URL
+        download_link = f"{settings.FRONTEND_URL}/badges/download/{pid}"
         send_email_notification.delay(
             recipient_email=email,
             subject="Your ACCRA 2026 Badge is Ready!",

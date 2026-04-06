@@ -12,6 +12,7 @@ from sqlalchemy import text
 from redis.asyncio import Redis
 from botocore.exceptions import ClientError
 from app.config.settings import settings
+from app.core.email import generate_html_email
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,8 @@ def send_email_notification(self, recipient_email: str, subject: str, body: str)
         time.sleep(2)
         return {"status": "simulated", "recipient": recipient_email}
         
+    html_body = generate_html_email(subject, body)
+        
     try:
         ses_client = boto3.client(
             "ses",
@@ -123,6 +126,10 @@ def send_email_notification(self, recipient_email: str, subject: str, body: str)
                 'Body': {
                     'Text': {
                         'Data': body,
+                        'Charset': 'UTF-8'
+                    },
+                    'Html': {
+                        'Data': html_body,
                         'Charset': 'UTF-8'
                     }
                 }
