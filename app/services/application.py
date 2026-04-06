@@ -9,6 +9,8 @@ from app.models.user import User
 from app.models.audit_log import AuditLog
 from app.models.document import Document
 from app.schemas.document import DocumentReview
+from app.models.participant import Participant
+from app.models.badge import Badge
 
 class ApplicationService:
     def __init__(self, session: AsyncSession):
@@ -92,6 +94,42 @@ class ApplicationService:
         if not application:
             raise HTTPException(status_code=404, detail="Application not found")
         return application
+
+    async def track_application_status(self, email: str | None = None, reference_number: str | None = None) -> dict:
+        if not email and not reference_number:
+            raise HTTPException(status_code=400, detail="Please provide an email or reference number.")
+            
+        stmt = (
+            select(
+                Application.id,
+                Application.first_name,
+                Application.last_name,
+                Application.status,
+                Application.category,
+                Badge.status.label("badge_status")
+            )
+            .outerjoin(Participant, Participant.application_id == Application.id)
+            .outerjoin(Badge, Badge.participant_id == Participant.id)
+        )
+        
+        if reference_number:
+            try:
+                app_id = uuid.UUID(reference_number)
+                stmt = stmt.where(Application.id == app_id)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid reference number format.")
+        else:
+            stmt = stmt.where(Application.email == email)
+            
+        # Order by newest first in case they have multiple historical applications
+        stmt = stmt.order_by(Application.submitted_at.desc()).limit(1)
+        
+        row = (await self.session.execute(stmt)).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Application not found. Please check your details.")
+            
+        # Return a safe dictionary mapping to the ApplicationTrackResponse schema
+        return {"reference_number": row.id, "first_name": row.first_name, "last_name": row.last_name, "status": row.status, "category": row.category, "badge_status": row.badge_status or "Pending Generation"}
 
     async def review_application(self, application_id: uuid.UUID, reviewer_id: uuid.UUID, review_data: ApplicationReview) -> Application:
         application = await self.get_application_by_id(application_id)

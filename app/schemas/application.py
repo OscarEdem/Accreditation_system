@@ -59,3 +59,11 @@ class ApplicationReadWithSubmitter(ApplicationRead):
 class ApplicationListResponse(BaseModel):
     total: int
     items: List[ApplicationReadWithSubmitter]
+
+class ApplicationTrackResponse(BaseModel):
+    reference_number: uuid.UUID
+    first_name: str
+    last_name: str
+    status: str
+    category: str
+    badge_status: str | None = None

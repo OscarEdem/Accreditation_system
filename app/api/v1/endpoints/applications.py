@@ -5,7 +5,7 @@ from typing import List, Annotated
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
-from app.schemas.application import ApplicationCreate, ApplicationRead, ApplicationReview, ApplicationReadWithSubmitter, ApplicationListResponse
+from app.schemas.application import ApplicationCreate, ApplicationRead, ApplicationReview, ApplicationReadWithSubmitter, ApplicationListResponse, ApplicationTrackResponse
 from app.schemas.document import DocumentReview, DocumentRead
 from app.services.application import ApplicationService
 from app.api.deps import get_current_user, RoleChecker
@@ -62,6 +62,15 @@ async def export_applications_csv(
     response = Response(content=output.getvalue(), media_type="text/csv")
     response.headers["Content-Disposition"] = 'attachment; filename="applications_export.csv"'
     return response
+
+@router.get("/track/status", response_model=ApplicationTrackResponse)
+async def track_application_status(
+    email: str | None = Query(None, description="Registered email address"),
+    reference_number: str | None = Query(None, description="Application reference number (UUID)"),
+    service: ApplicationService = Depends(get_application_service)
+):
+    """Public endpoint to track application and badge status."""
+    return await service.track_application_status(email=email, reference_number=reference_number)
 
 @router.get("/", response_model=ApplicationListResponse)
 async def get_applications(
