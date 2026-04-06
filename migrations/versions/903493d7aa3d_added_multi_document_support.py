@@ -30,7 +30,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['application_id'], ['applications.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.add_column('applications', sa.Column('is_gdpr_scrubbed', sa.Boolean(), nullable=False))
+    op.add_column('applications', sa.Column('is_gdpr_scrubbed', sa.Boolean(), server_default='false', nullable=False))
     # ### end Alembic commands ###
 
 def downgrade() -> None:
