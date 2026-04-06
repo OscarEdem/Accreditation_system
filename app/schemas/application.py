@@ -17,9 +17,11 @@ class ApplicationStatus(str, Enum):
     returned = "returned"
 
 class ApplicationCategory(str, Enum):
-    athlete_team_official = "Athlete/Team Official"
+    athlete = "Athlete"
+    team_official = "Team Official"
     technical_competition_official = "Technical and Competition Officials"
-    loc_staff_volunteer = "LOC Staff/Volunteer"
+    loc_staff = "LOC Staff"
+    volunteer = "Volunteer"
     media = "Media"
     security = "Security"
     vip_sponsor = "VIP and Sponsors"
