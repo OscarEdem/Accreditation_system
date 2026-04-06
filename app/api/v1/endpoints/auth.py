@@ -31,24 +31,6 @@ async def register_user(user_in: UserCreate, service: UserService = Depends(get_
 @router.post("/login", response_model=Token)
 async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-    service: UserService = Depends(get_user_service)
-):
-    user = await service.authenticate_user(form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    # Generate a unique session ID and store it in Redis as the active session
-    session_id = str(uuid.uuid4())
-    # Using get_redis directly requires managing the generator manually in this non-dependency context, 
-    # but it's cleaner to inject it as a dependency:
-
-@router.post("/login", response_model=Token)
-async def login_for_access_token(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     service: UserService = Depends(get_user_service),
     redis: Redis = Depends(get_redis)
 ):
