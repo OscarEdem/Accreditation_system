@@ -24,7 +24,7 @@ def generate_html_email(subject: str, text_body: str) -> str:
         <div class="warning-box" role="alert">
           <p class="warning-title">Security Notice</p>
           <p class="warning-body">
-            Please do not share this link with anyone. It provides secure access to your ASAC 2026 account.
+            Please do not share this link with anyone. It provides secure access to your ACCRA 2026 account.
           </p>
         </div>
         """
@@ -46,8 +46,9 @@ def generate_html_email(subject: str, text_body: str) -> str:
     }
     .email-wrapper { max-width: 620px; margin: 0 auto; }
     .email-card { background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,.5); }
-    .email-header { background: #0b1622; padding: 24px 48px; display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #f0a500; }
-    .logo-icon { width: 42px; height: 42px; flex-shrink: 0; }
+    .email-header { background: #0b1622; padding: 24px 48px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 2px solid #f0a500; }
+    .logos-wrapper { display: flex; align-items: center; gap: 16px; }
+    .header-logo { max-height: 48px; width: auto; object-fit: contain; }
     .logo-text-block { display: flex; flex-direction: column; gap: 2px; }
     .logo-wordmark { font-family: 'Barlow Condensed', sans-serif; font-size: 22px; font-weight: 900; color: #ffffff; letter-spacing: 2px; text-transform: uppercase; line-height: 1; }
     .logo-wordmark span { color: #f0a500; }
@@ -79,17 +80,12 @@ def generate_html_email(subject: str, text_body: str) -> str:
   <div class="email-card">
     <!-- Header -->
     <div class="email-header">
-      <svg class="logo-icon" viewBox="0 0 42 42" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="28" cy="7" r="4" fill="#f0a500"/>
-        <path d="M28 11 L22 22 L14 30" stroke="#f0a500" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M25 16 L32 12" stroke="#f0a500" stroke-width="2.8" stroke-linecap="round"/>
-        <path d="M24 19 L17 15" stroke="#f0a500" stroke-width="2.8" stroke-linecap="round"/>
-        <path d="M22 22 L29 30" stroke="#f0a500" stroke-width="2.8" stroke-linecap="round"/>
-        <line x1="4" y1="37" x2="38" y2="37" stroke="#f0a500" stroke-width="2.2" stroke-linecap="round" opacity=".35"/>
-        <line x1="4" y1="33" x2="38" y2="33" stroke="#f0a500" stroke-width="1" stroke-linecap="round" opacity=".15"/>
-      </svg>
-      <div class="logo-text-block">
-        <span class="logo-wordmark">ASAC <span>2026</span></span>
+      <div class="logos-wrapper">
+        <img src="https://ams-fastapi-images-12345.s3.eu-north-1.amazonaws.com/LOGO%20AND%20WORDMARK-03.png" alt="Accra 2026" class="header-logo" />
+        <img src="https://ams-fastapi-images-12345.s3.eu-north-1.amazonaws.com/LOGO%20AND%20WORDMARK-02.png" alt="Partner Logo" class="header-logo" />
+      </div>
+      <div class="logo-text-block" style="text-align: right;">
+        <span class="logo-wordmark">ACCRA <span>2026</span></span>
         <span class="logo-sub">Official Accreditation Portal</span>
       </div>
     </div>
@@ -97,7 +93,7 @@ def generate_html_email(subject: str, text_body: str) -> str:
     <!-- Body -->
     <div class="email-body">
       <h1 class="headline">
-        <span class="dark">ASAC </span><span class="gold">2026</span>
+        <span class="dark">ACCRA </span><span class="gold">2026</span>
       </h1>
       <div class="subject-line">___SUBJECT___</div>
 
