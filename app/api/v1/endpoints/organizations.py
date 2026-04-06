@@ -19,9 +19,11 @@ def get_organization_service(db: AsyncSession = Depends(get_db)) -> Organization
 async def create_organization(
     current_user: Annotated[User, Depends(allow_admin)],
     service: OrganizationService = Depends(get_organization_service),
-    name: str = Form(...)
+    name: str = Form(...),
+    type: str | None = Form(None),
+    country: str | None = Form(None)
 ):
-    org_in = OrganizationCreate(name=name)
+    org_in = OrganizationCreate(name=name, type=type, country=country)
     return await service.create_organization(org_in)
 
 @router.get("/", response_model=OrganizationListResponse)

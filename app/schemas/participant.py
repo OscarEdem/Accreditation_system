@@ -25,7 +25,13 @@ class ParticipantRole(str, Enum):
     
     # LOC Staff and Volunteers
     loc_staff = "LOC Staff"
-    volunteer = "Volunteer"
+    technical_volunteer = "Technical Volunteers"
+    media_volunteer = "Media Volunteers"
+    protocol_volunteer = "Protocol Volunteers"
+    transport_volunteer = "Transport Volunteers"
+    medical_anti_doping_volunteer = "Medical and Anti-Doping Volunteers"
+    security_volunteer = "Security Volunteers"
+    accreditation_information_volunteer = "Accreditation and Information Volunteers"
     
     # Other Generic Categories
     media = "Media"

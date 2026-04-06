@@ -1,10 +1,12 @@
 import uuid
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
 
 class OrganizationBase(BaseModel):
     name: str
+    type: Optional[str] = None
+    country: Optional[str] = None
 
 class OrganizationCreate(OrganizationBase):
     pass
