@@ -46,9 +46,14 @@ async def get_current_user(
     if active_session and isinstance(active_session, bytes):
         active_session = active_session.decode("utf-8")
         
-    if not active_session or active_session != session_id:
-        raise credentials_exception
-        
+    if active_session:
+        if active_session == "revoked" or active_session != session_id:
+            raise credentials_exception
+    else:
+        # RELAXED RULE: Redis was cleared (e.g., container restart). Trust the valid JWT
+        # and restore the session in Redis so future force-logouts still work.
+        await redis.set(f"active_session:{user.id}", session_id, ex=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+
     return user
 
 class RoleChecker:

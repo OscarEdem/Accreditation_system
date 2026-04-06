@@ -63,7 +63,7 @@ async def logout(
     current_user: Annotated[User, Depends(get_current_user)],
     redis: Redis = Depends(get_redis)
 ):
-    await redis.delete(f"active_session:{current_user.id}")
+    await redis.set(f"active_session:{current_user.id}", "revoked", ex=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
     return {"message": "Successfully logged out."}
 
 @router.post("/force-logout/{user_id}")
@@ -73,7 +73,7 @@ async def force_logout_user(
     redis: Redis = Depends(get_redis)
 ):
     """Allows an Admin to instantly terminate a specific user's active session."""
-    await redis.delete(f"active_session:{user_id}")
+    await redis.set(f"active_session:{user_id}", "revoked", ex=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
     return {"message": f"User session for {user_id} has been forcefully terminated."}
 
 @router.post("/forgot-password")

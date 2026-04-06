@@ -85,7 +85,8 @@ app = FastAPI(
     title="Accreditation Management System API",
     description="Production-grade API for managing tournament accreditations, participants, and secure zone access.",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    swagger_ui_parameters={"persistAuthorization": True}
 )
 
 # --- CORS Configuration ---

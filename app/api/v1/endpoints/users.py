@@ -10,6 +10,7 @@ from app.schemas.user import UserRead, UserUpdateRole, UserUpdateStatus, UserRol
 from app.services.user import UserService
 from app.api.deps import RoleChecker
 from app.models.user import User
+from app.config.settings import settings
 
 router = APIRouter()
 
@@ -53,7 +54,7 @@ async def update_user_status(
 ):
     user = await service.update_user_status(user_id, is_active)
     if not is_active:
-        await redis.delete(f"active_session:{user_id}")
+        await redis.set(f"active_session:{user_id}", "revoked", ex=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
     return user
 
 @router.delete("/clear-database")
