@@ -41,6 +41,11 @@ async def get_current_user(
         
     # Verify this token belongs to the currently active session in Redis
     active_session = await redis.get(f"active_session:{user.id}")
+    
+    # Redis returns bytes by default, so we must decode it back to a string
+    if active_session and isinstance(active_session, bytes):
+        active_session = active_session.decode("utf-8")
+        
     if not active_session or active_session != session_id:
         raise credentials_exception
         

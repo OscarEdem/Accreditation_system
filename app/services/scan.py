@@ -66,6 +66,9 @@ class ScanService:
         state_key = f"location:{participant_id}:{zone_id}"
         last_direction = await self.redis.get(state_key)
         
+        if last_direction and isinstance(last_direction, bytes):
+            last_direction = last_direction.decode("utf-8")
+            
         if not last_direction:
             # Cache miss for state: check DB for last successful scan
             last_scan_stmt = (
