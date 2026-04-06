@@ -10,11 +10,11 @@ class DocumentStatus(str, Enum):
     rejected = "rejected"
 
 class DocumentType(str, Enum):
-    passport = "passport"
-    national_id = "national_id"
-    medical_clearance = "medical_clearance"
-    media_credential = "media_credential"
-    other = "other"
+    passport = "Valid Passport"
+    nomination_letter = "Appointment/Nomination Letter"
+    medical_certificate = "Medical Certificate"
+    liability_waiver = "Liability Waiver"
+    other = "Other"
 
 class DocumentBase(BaseModel):
     document_type: DocumentType
