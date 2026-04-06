@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: str | None = None
     AWS_SECRET_ACCESS_KEY: str | None = None
     AWS_REGION: str = "us-east-1"
+    SES_REGION: str = "us-east-1"
     S3_BUCKET_NAME: str | None = None
     AWS_SES_SENDER: str | None = None
     FRONTEND_URL: str = "http://localhost:3000"

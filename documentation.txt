@@ -41,6 +41,10 @@ Logic:
   JWT "invite token". Celery sends an AWS SES email with an activation link.
 - Password Reset & Resend Invite: Uses expiring JWTs. Both endpoints are strictly 
   rate-limited by Redis (max 3 requests per minute per email) to prevent email spam.
+- Session Management & Deactivation: Logins generate a unique `session_id` stored in 
+  Redis. Subsequent API requests verify this session. Admins can toggle a user's 
+  `is_active` status or hit `/force-logout`, instantly deleting the Redis key and 
+  forcefully terminating the user's active session worldwide.
 
 ### 3.2 Tournament & Venue Configuration
 Logic:
@@ -61,11 +65,19 @@ Logic:
 - Delegation Submission: An `org_admin` is exempt from the duplicate check. They 
   can submit infinite applications on behalf of their team. The backend records 
   the `user_id` as the "Submitter" and stores the participant's name separately.
+- Strict Categorization: Categories and Roles are strictly enforced via Pydantic Enums 
+  (e.g., 'Chef De Mission', 'Event Referee') matching the frontend multi-step forms.
+- Multi-Document Support: Applications support infinite auxiliary documents (Passports, 
+  Medical Forms, etc.) via the `documents` table, alongside the primary profile photo.
 
 ### 3.4 Application Review & Audit Trail
 Logic:
 - An `officer` fetches paginated, filterable applications (by status, category, etc.).
+- CSV Export: Admins can hit the `/export` endpoint to download a dynamically filtered 
+  CSV spreadsheet of applications.
 - The officer updates the status (e.g., "pending" -> "approved") via a PATCH request.
+- Document Review: Officers can reject *specific* documents without rejecting the 
+  entire application, automatically emailing the user to re-upload just that file.
 - Audit Logging: The system detects the status change and automatically creates a 
   record in the `AuditLog` table, tracking who made the change, the old status, 
   the new status, and the timestamp.
@@ -100,15 +112,17 @@ checks occur in under 300ms:
   Step 2. Cryptographic Check (Zero-Trust): The server re-calculates the HMAC-SHA256 
           signature using the scanned ID and Serial. If it doesn't match the scanned 
           signature, the badge is a forgery. Access is instantly DENIED.
-  Step 3. Redis Cache Check: The server checks `scan:{participant_id}:{zone_id}`. 
-          If found, it returns the cached GRANTED/DENIED response instantly.
-  Step 4. Database Fallback (Cache Miss): The server queries PostgreSQL. It checks if:
+  Step 3. Anti-Passback (State Check): The server checks the `location` cache. If a user 
+          tries to scan 'IN' while already 'IN', they receive an Anti-Passback DENIED error.
+  Step 4. Redis Auth Cache Check: The server checks `auth:{participant_id}:{zone_id}`. 
+          If found, it returns the cached GRANTED/DENIED authorization instantly.
+  Step 5. Database Fallback (Cache Miss): The server queries PostgreSQL. It checks if:
           a) The participant exists.
           b) The linked application status is "approved".
           c) The participant's Category is linked to the requested Zone in `ZoneAccess`.
-  Step 5. Cache & Log: The final result is cached in Redis for 5 minutes. The attempt
-          is permanently saved in the `ScanLog` table along with the scanning direction
-          (IN or OUT) for security auditing and live capacity tracking.
+  Step 6. Cache & Log: The authorization result is cached for 5 minutes. If GRANTED, the 
+          location state is updated (IN or OUT). The attempt is permanently saved in 
+          the `ScanLog` table for security auditing and live capacity tracking.
 
 ### 3.7 Directional Scanning & Zone Capacity Tracking
 Logic:
@@ -135,6 +149,21 @@ Logic:
 - All GET list endpoints (Applications, Participants, Organizations) return a unified 
   wrapper `{"total": int, "items": [...]}` to support frontend pagination.
 
+### 3.10 Communications & Webhooks (SES/SNS)
+Logic:
+- HTML Templates: All plain-text emails dispatched to Celery are automatically parsed, 
+  URLs are extracted, and wrapped in a branded ASAC 2026 HTML UI before sending.
+- SES Bounce Tracking: A public webhook (`/webhooks/ses`) listens to Amazon SNS topics 
+  to catch email bounces and spam complaints, protecting the AWS sender reputation.
+
+### 3.11 GDPR & Data Retention Automation
+Logic:
+- Automated Purge: A Celery Beat scheduler wakes up at Midnight UTC daily and searches 
+  for tournaments that ended > 30 days ago.
+- Scrubbing: For expired tournaments, it permanently deletes S3 photos/documents and 
+  overwrites database PII (Names, Emails, DOBs) with "REDACTED".
+- Manual Trigger: Super Admins can manually fire `/api/v1/gdpr/scrub` to instantly 
+  purge data for customized timeframes.
 
 4. INFRASTRUCTURE & DEPLOYMENT (AWS)
 -------------------------------------------------------------------------------

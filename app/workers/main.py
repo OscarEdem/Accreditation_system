@@ -110,7 +110,7 @@ def send_email_notification(self, recipient_email: str, subject: str, body: str)
             "ses",
             aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
             aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_REGION
+            region_name=settings.SES_REGION
         )
         
         response = ses_client.send_email(
