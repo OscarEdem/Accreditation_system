@@ -1,15 +1,16 @@
 import uuid
 from datetime import timedelta
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Form
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 from redis.asyncio import Redis
 
 from app.db.session import get_db
 from app.db.redis import get_redis
 from app.schemas.token import Token
-from app.schemas.user import UserCreate, UserRead, ForgotPasswordRequest, ResetPasswordRequest, UserInvite, AcceptInviteRequest, ResendInviteRequest
+from app.schemas.user import UserCreate, UserRead, ForgotPasswordRequest, ResetPasswordRequest, UserInvite, AcceptInviteRequest, ResendInviteRequest, UserRole
 from app.services.user import UserService
 from app.core.security import create_access_token
 from app.config.settings import settings
@@ -108,10 +109,21 @@ async def reset_password(request: ResetPasswordRequest, service: UserService = D
 
 @router.post("/invite", response_model=UserRead, status_code=201)
 async def invite_user(
-    user_in: UserInvite,
     current_user: Annotated[User, Depends(allow_admin)],
-    service: UserService = Depends(get_user_service)
+    service: UserService = Depends(get_user_service),
+    first_name: str = Form(...),
+    last_name: str = Form(...),
+    email: EmailStr = Form(...),
+    role: UserRole = Form(...),
+    organization_id: uuid.UUID | None = Form(None)
 ):
+    user_in = UserInvite(
+        first_name=first_name,
+        last_name=last_name,
+        email=email,
+        role=role,
+        organization_id=organization_id
+    )
     user = await service.invite_user(user_in)
     
     token = service.create_invite_token(user.email)

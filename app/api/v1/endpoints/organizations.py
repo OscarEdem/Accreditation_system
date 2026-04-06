@@ -1,6 +1,6 @@
 import uuid
 from typing import List, Annotated
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.schemas.organization import OrganizationCreate, OrganizationRead, OrganizationListResponse
@@ -17,10 +17,11 @@ def get_organization_service(db: AsyncSession = Depends(get_db)) -> Organization
 
 @router.post("/", response_model=OrganizationRead, status_code=201)
 async def create_organization(
-    org_in: OrganizationCreate,
     current_user: Annotated[User, Depends(allow_admin)],
-    service: OrganizationService = Depends(get_organization_service)
+    service: OrganizationService = Depends(get_organization_service),
+    name: str = Form(...)
 ):
+    org_in = OrganizationCreate(name=name)
     return await service.create_organization(org_in)
 
 @router.get("/", response_model=OrganizationListResponse)

@@ -1,6 +1,6 @@
 import uuid
 from typing import List, Annotated
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.schemas.category import CategoryCreate, CategoryRead
@@ -17,10 +17,11 @@ def get_category_service(db: AsyncSession = Depends(get_db)) -> CategoryService:
 
 @router.post("/", response_model=CategoryRead, status_code=201)
 async def create_category(
-    category_in: CategoryCreate,
     current_user: Annotated[User, Depends(allow_admin)],
-    service: CategoryService = Depends(get_category_service)
+    service: CategoryService = Depends(get_category_service),
+    name: str = Form(...)
 ):
+    category_in = CategoryCreate(name=name)
     return await service.create_category(category_in)
 
 @router.get("/", response_model=List[CategoryRead])

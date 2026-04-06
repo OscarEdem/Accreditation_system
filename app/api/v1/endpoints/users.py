@@ -1,12 +1,11 @@
 import uuid
 from typing import Annotated
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, DependsncSession
+from sqlalchemy import text
 from redis.asyncio import Redis
 from app.db.session import get_db
 from app.db.redis import get_redis
-from app.schemas.user import UserRead, UserUpdateRole, UserUpdateStatus
-from app.services.user import UserService
+from app.schemas.user import Use U
 from app.api.deps import RoleChecker
 from app.models.user import User
 
@@ -20,21 +19,41 @@ def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
 @router.patch("/{user_id}/role", response_model=UserRead)
 async def update_user_role(
     user_id: uuid.UUID,
-    update_data: UserUpdateRole,
     current_user: Annotated[User, Depends(allow_admin)],
-    service: UserService = Depends(get_user_service)
-):
-    return await service.update_user_role(user_id, update_data.role, update_data.organization_id)
+    service: UserServi
+    organization_id: uuid.UUID | None = Form(None)
+    return await service.update_user_role(user_id, role, organization_id)
 
 @router.patch("/{user_id}/status", response_model=UserRead)
 async def update_user_status(
     user_id: uuid.UUID,
-    update_data: UserUpdateStatus,
-    current_user: Annotated[User, Depends(allow_admin)],
     service: UserService = Depends(get_user_service),
-    redis: Redis = Depends(get_redis)
-):
-    user = await service.update_user_status(user_id, update_data.is_active)
-    if not update_data.is_active:
+    redis: Redis = Depends(get_redis),
+    is_active: bool = Form(...)
+):ser_status(user_id, is_active)
+    if not is_active:
         await redis.delete(f"active_session:{user_id}")
     return user
+@router.delete("/clear-database")
+aet_db)
+):
+    """
+    DANGEROUS: Clears all tables in the database except for the admin@example.com user.
+    """
+    tables_to_clear = [
+        "applications",
+        "tournaments",
+        "venues",
+        "categories",
+        "zones",
+        "audit_logs",
+        "organizations"
+    ]
+    
+    truncate_query = f"TRUNCATE {', '.join(tables_to_clear)} CASCADE;"
+    
+    await db.execute(text(truncate_query))
+    await db.execute(text("DELETE FROM users WHERE email != 'admin@example.com'"))
+    await db.commit()
+    
+    return {"message": "Database wiped successfully. Only admin@example.com remains."}

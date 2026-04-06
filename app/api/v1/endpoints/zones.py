@@ -1,6 +1,6 @@
 import uuid
 from typing import List, Annotated
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from redis.asyncio import Redis
 from app.db.session import get_db
@@ -22,10 +22,13 @@ def get_zone_service(
 
 @router.post("/", response_model=ZoneRead, status_code=201)
 async def create_zone(
-    zone_in: ZoneCreate,
     current_user: Annotated[User, Depends(allow_admin)],
-    service: ZoneService = Depends(get_zone_service)
+    service: ZoneService = Depends(get_zone_service),
+    name: str = Form(...),
+    venue_id: uuid.UUID = Form(...),
+    description: str | None = Form(None)
 ):
+    zone_in = ZoneCreate(name=name, venue_id=venue_id, description=description)
     return await service.create_zone(zone_in)
 
 @router.get("/", response_model=List[ZoneRead])
@@ -46,11 +49,11 @@ async def get_zone(
 @router.post("/{zone_id}/access", status_code=201)
 async def grant_zone_access(
     zone_id: uuid.UUID,
-    access_in: ZoneAccessCreate,
     current_user: Annotated[User, Depends(allow_admin)],
-    service: ZoneService = Depends(get_zone_service)
+    service: ZoneService = Depends(get_zone_service),
+    category_id: uuid.UUID = Form(...)
 ):
-    return await service.grant_access(zone_id, access_in.category_id)
+    return await service.grant_access(zone_id, category_id)
 
 @router.get("/{zone_id}/capacity", status_code=200)
 async def get_zone_capacity(

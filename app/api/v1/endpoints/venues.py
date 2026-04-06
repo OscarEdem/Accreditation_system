@@ -1,6 +1,6 @@
 import uuid
 from typing import List, Annotated
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.schemas.venue import VenueCreate, VenueRead
@@ -17,10 +17,14 @@ def get_venue_service(db: AsyncSession = Depends(get_db)) -> VenueService:
 
 @router.post("/", response_model=VenueRead, status_code=201)
 async def create_venue(
-    venue_in: VenueCreate,
     current_user: Annotated[User, Depends(allow_admin)],
-    service: VenueService = Depends(get_venue_service)
+    service: VenueService = Depends(get_venue_service),
+    name: str = Form(...),
+    address: str = Form(...),
+    capacity: int = Form(...),
+    contact_email: str = Form(...)
 ):
+    venue_in = VenueCreate(name=name, address=address, capacity=capacity, contact_email=contact_email)
     return await service.create_venue(venue_in)
 
 @router.get("/", response_model=List[VenueRead])

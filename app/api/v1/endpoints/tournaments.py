@@ -1,6 +1,7 @@
 import uuid
 from typing import List, Annotated
-from fastapi import APIRouter, Depends
+from datetime import date
+from fastapi import APIRouter, Depends, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.schemas.tournament import TournamentCreate, TournamentRead
@@ -17,10 +18,15 @@ def get_tournament_service(db: AsyncSession = Depends(get_db)) -> TournamentServ
 
 @router.post("/", response_model=TournamentRead, status_code=201)
 async def create_tournament(
-    tournament_in: TournamentCreate,
     current_user: Annotated[User, Depends(allow_admin)],
-    service: TournamentService = Depends(get_tournament_service)
+    service: TournamentService = Depends(get_tournament_service),
+    name: str = Form(...),
+    start_date: date = Form(...),
+    end_date: date = Form(...),
+    venue_id: uuid.UUID = Form(...),
+    description: str | None = Form(None)
 ):
+    tournament_in = TournamentCreate(name=name, start_date=start_date, end_date=end_date, venue_id=venue_id, description=description)
     return await service.create_tournament(tournament_in)
 
 @router.get("/", response_model=List[TournamentRead])
