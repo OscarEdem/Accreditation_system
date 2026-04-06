@@ -28,8 +28,9 @@ class UserService:
         
         # Force new registered users to be 'applicant', preventing privilege escalation attacks
         user_data["role"] = "applicant"
-        user_data["organization_id"] = None
-        
+        if not user_data.get("organization_id"):
+            raise HTTPException(status_code=400, detail="An Organization must be selected to register.")
+
         user = User(**user_data, password_hash=get_password_hash(password))
         
         self.session.add(user)

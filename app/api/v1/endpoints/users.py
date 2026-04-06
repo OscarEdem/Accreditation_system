@@ -1,6 +1,6 @@
 import uuid
 from typing import Annotated
-from fastapi import APIRouter, Depends, Form
+from fastapi import APIRouter, Depends, Form, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from redis.asyncio import Redis
@@ -24,9 +24,24 @@ async def update_user_role(
     current_user: Annotated[User, Depends(allow_admin)],
     service: UserService = Depends(get_user_service),
     role: UserRole = Form(...),
-    organization_id: uuid.UUID | None = Form(None)
+    organization_id: str | None = Form(None)
 ):
-    return await service.update_user_role(user_id, role, organization_id)
+    # Safely handle empty strings from HTML forms
+    org_uuid = None
+    if organization_id and organization_id.strip():
+        try:
+            org_uuid = uuid.UUID(organization_id.strip())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid organization_id format")
+            
+    # Enforce Organization requirements based on Role
+    if role in [UserRole.org_admin, UserRole.applicant]:
+        if not org_uuid:
+            raise HTTPException(status_code=400, detail=f"An Organization must be selected for the {role.value} role.")
+    else:
+        org_uuid = None  # Ensure system admins/staff don't get tied to a participant organization
+            
+    return await service.update_user_role(user_id, role, org_uuid)
 
 @router.patch("/{user_id}/status", response_model=UserRead)
 async def update_user_status(

@@ -115,14 +115,29 @@ async def invite_user(
     last_name: str = Form(...),
     email: EmailStr = Form(...),
     role: UserRole = Form(...),
-    organization_id: uuid.UUID | None = Form(None)
+    organization_id: str | None = Form(None)
 ):
+    # Safely convert an empty string from the Swagger UI form into a valid None
+    org_uuid = None
+    if organization_id and organization_id.strip():
+        try:
+            org_uuid = uuid.UUID(organization_id.strip())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid organization_id format")
+            
+    # Enforce Organization requirements based on Role
+    if role in [UserRole.org_admin, UserRole.applicant]:
+        if not org_uuid:
+            raise HTTPException(status_code=400, detail=f"An Organization must be selected for the {role.value} role.")
+    else:
+        org_uuid = None  # Ensure system admins/staff don't get tied to a participant organization
+            
     user_in = UserInvite(
         first_name=first_name,
         last_name=last_name,
         email=email,
         role=role,
-        organization_id=organization_id
+        organization_id=org_uuid
     )
     user = await service.invite_user(user_in)
     
@@ -135,7 +150,7 @@ async def invite_user(
         subject="ACCRA 2026 - Account Invitation",
         body=(
             f"Hello {user.first_name},\n\n"
-            f"You have been invited as a '{user.role.value}' for ACCRA 2026.\n"
+            f"You have been invited as a '{user_in.role.value}' for ACCRA 2026.\n"
             f"Click here to set your password and access your account (valid for 24 hours):\n{invite_link}\n\n"
             f"If this link has expired, you can request a new one here:\n{resend_link}"
         )

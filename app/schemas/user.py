@@ -17,6 +17,7 @@ class UserBase(BaseModel):
     email: EmailStr
     role: UserRole = UserRole.applicant
     is_active: bool = True
+    organization_id: uuid.UUID | None = None
 
 class UserCreate(UserBase):
     password: str
