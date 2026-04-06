@@ -1,4 +1,4 @@
-alsimport uuid
+import uuid
 import jwt
 import secrets
 from datetime import datetime, timedelta, timezone
