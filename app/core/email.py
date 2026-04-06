@@ -48,7 +48,7 @@ def generate_html_email(subject: str, text_body: str) -> str:
     .email-card { background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,.5); }
     .email-header { background: #0b1622; padding: 24px 48px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 2px solid #f0a500; }
     .logos-wrapper { display: flex; align-items: center; gap: 16px; }
-    .header-logo { max-height: 48px; width: auto; object-fit: contain; }
+    .header-logo { max-height: 48px; width: auto; object-fit: contain; background-color: #ffffff; padding: 6px 10px; border-radius: 6px; }
     .logo-text-block { display: flex; flex-direction: column; gap: 2px; }
     .logo-wordmark { font-family: 'Barlow Condensed', sans-serif; font-size: 22px; font-weight: 900; color: #ffffff; letter-spacing: 2px; text-transform: uppercase; line-height: 1; }
     .logo-wordmark span { color: #f0a500; }
@@ -81,8 +81,7 @@ def generate_html_email(subject: str, text_body: str) -> str:
     <!-- Header -->
     <div class="email-header">
       <div class="logos-wrapper">
-        <img src="https://ams-fastapi-images-12345.s3.eu-north-1.amazonaws.com/LOGO%20AND%20WORDMARK-03.png" alt="Accra 2026" class="header-logo" />
-        <img src="https://ams-fastapi-images-12345.s3.eu-north-1.amazonaws.com/LOGO%20AND%20WORDMARK-02.png" alt="Partner Logo" class="header-logo" />
+        <img src="https://ams-fastapi-images-12345.s3.eu-north-1.amazonaws.com/LOGO%20AND%20WORDMARK-02.png" alt="Accra 2026" class="header-logo" />
       </div>
       <div class="logo-text-block" style="text-align: right;">
         <span class="logo-wordmark">ACCRA <span>2026</span></span>
