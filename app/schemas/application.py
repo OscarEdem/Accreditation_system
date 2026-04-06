@@ -16,13 +16,21 @@ class ApplicationStatus(str, Enum):
     rejected = "rejected"
     returned = "returned"
 
+class ApplicationCategory(str, Enum):
+    athlete_team_official = "Athlete/Team Official"
+    technical_competition_official = "Technical and Competition Officials"
+    loc_staff_volunteer = "LOC Staff/Volunteer"
+    media = "Media"
+    security = "Security"
+    vip_sponsor = "VIP and Sponsors"
+
 class ApplicationBase(BaseModel):
     user_id: uuid.UUID | None = None  # Will be auto-filled by the backend as "Submitted By"
     first_name: str
     last_name: str
     email: str
     organization_id: Optional[uuid.UUID] = None
-    category: str
+    category: ApplicationCategory
     photo_url: Optional[str] = None
     dob: Optional[date] = None
     gender: Optional[GenderEnum] = None
