@@ -25,6 +25,14 @@ class ApplicationCategory(str, Enum):
     media = "Media"
     security = "Security"
     vip_sponsor = "VIP and Sponsors"
+    
+    # --- NEW CAA & WORLD ATHLETICS STANDARDS ---
+    category_a = "Athletes & Team Officials"
+    category_t = "Technical & Competition Officials"
+    category_l = "LOC & Workforce"
+    category_m = "Media & Broadcast"
+    category_v = "VIPs & Dignitaries"
+    category_s = "Service Providers"
 
 class ApplicationBase(BaseModel):
     user_id: uuid.UUID | None = None  # Will be auto-filled by the backend as "Submitted By"
@@ -36,6 +44,8 @@ class ApplicationBase(BaseModel):
     photo_url: Optional[str] = None
     dob: Optional[date] = None
     gender: Optional[GenderEnum] = None
+    country: str
+    sporting_disciplines: Optional[List[str]] = []
 
 class ApplicationCreate(ApplicationBase):
     documents: List[DocumentCreate] = []
@@ -43,6 +53,15 @@ class ApplicationCreate(ApplicationBase):
 class ApplicationReview(BaseModel):
     status: ApplicationStatus
     reviewer_comments: Optional[str] = None
+    tournament_id: Optional[uuid.UUID] = None
+    assigned_role: Optional[str] = None
+
+class ApplicationBatchReview(BaseModel):
+    application_ids: List[uuid.UUID]
+    status: ApplicationStatus
+    reviewer_comments: Optional[str] = None
+    tournament_id: Optional[uuid.UUID] = None
+    assigned_role: Optional[str] = None
 
 class ApplicationRead(ApplicationBase):
     id: uuid.UUID

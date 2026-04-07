@@ -6,6 +6,7 @@ class DashboardStats(BaseModel):
     approved_applications: int
     rejected_applications: int
     total_participants: int
+    total_organizations: int
     total_scans: int
     granted_scans: int
     denied_scans: int

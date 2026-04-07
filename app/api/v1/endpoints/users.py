@@ -1,12 +1,12 @@
 import uuid
 from typing import Annotated
-from fastapi import APIRouter, Depends, Form, HTTPException
+from fastapi import APIRouter, Depends, Form, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
+from sqlalchemy import text, select, func, or_
 from redis.asyncio import Redis
 from app.db.session import get_db
 from app.db.redis import get_redis
-from app.schemas.user import UserRead, UserUpdateRole, UserUpdateStatus, UserRole
+from app.schemas.user import UserRead, UserUpdateRole, UserUpdateStatus, UserRole, UserListResponse
 from app.services.user import UserService
 from app.api.deps import RoleChecker
 from app.models.user import User
@@ -18,6 +18,41 @@ allow_admin = RoleChecker(["admin", "loc_admin"])
 
 def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
     return UserService(db)
+
+@router.get("/", response_model=UserListResponse)
+async def get_users(
+    current_user: Annotated[User, Depends(allow_admin)],
+    db: AsyncSession = Depends(get_db),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page"),
+    search: str | None = Query(None, description="Search by name or email")
+):
+    """
+    Fetch a paginated list of all users. Required for the Admin Dashboard User Management table.
+    """
+    skip = (page - 1) * limit
+    
+    # Base condition: Hide the root Super Admin account from the list
+    base_conditions = [User.email != "admin@example.com"]
+    
+    if search:
+        search_term = f"%{search}%"
+        base_conditions.append(
+            or_(
+                User.first_name.ilike(search_term),
+                User.last_name.ilike(search_term),
+                User.email.ilike(search_term)
+            )
+        )
+    
+    count_stmt = select(func.count()).select_from(User).where(*base_conditions)
+    total = await db.scalar(count_stmt)
+    
+    stmt = select(User).where(*base_conditions).order_by(User.created_at.desc()).offset(skip).limit(limit)
+    result = await db.execute(stmt)
+    users = result.scalars().all()
+    
+    return {"total": total, "items": users}
 
 @router.patch("/{user_id}/role", response_model=UserRead)
 async def update_user_role(
@@ -63,7 +98,7 @@ async def clear_database(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    DANGEROUS: Clears all tables in the database except for the admin@example.com user.
+    DANGEROUS: Clears all tables in the database except for admin users.
     """
     tables_to_clear = [
         "applications",
@@ -78,7 +113,7 @@ async def clear_database(
     truncate_query = f"TRUNCATE {', '.join(tables_to_clear)} CASCADE;"
     
     await db.execute(text(truncate_query))
-    await db.execute(text("DELETE FROM users WHERE email != 'admin@example.com'"))
+    await db.execute(text("DELETE FROM users WHERE role != 'admin'"))
     await db.commit()
     
-    return {"message": "Database wiped successfully. Only admin@example.com remains."}
+    return {"message": "Database wiped successfully. Only admin users remain."}

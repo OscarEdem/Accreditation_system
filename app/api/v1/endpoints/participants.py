@@ -3,7 +3,7 @@ from typing import List, Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
-from app.schemas.participant import ParticipantCreate, ParticipantRead, ParticipantListResponse
+from app.schemas.participant import ParticipantRead, ParticipantListResponse
 from app.services.participant import ParticipantService
 from app.api.deps import get_current_user
 from app.models.user import User
@@ -12,22 +12,6 @@ router = APIRouter()
 
 def get_participant_service(db: AsyncSession = Depends(get_db)) -> ParticipantService:
     return ParticipantService(db)
-
-@router.post("/", response_model=ParticipantRead, status_code=201)
-async def create_participant(
-    participant_in: ParticipantCreate,
-    current_user: Annotated[User, Depends(get_current_user)],
-    service: ParticipantService = Depends(get_participant_service)
-):
-    return await service.create_participant(participant_in)
-
-@router.post("/batch", response_model=List[ParticipantRead], status_code=201)
-async def create_participants_batch(
-    participants_in: List[ParticipantCreate],
-    current_user: Annotated[User, Depends(get_current_user)],
-    service: ParticipantService = Depends(get_participant_service)
-):
-    return await service.create_participants_batch(participants_in)
 
 @router.get("/", response_model=ParticipantListResponse)
 async def get_participants(

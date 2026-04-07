@@ -5,7 +5,7 @@ from typing import List, Annotated
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
-from app.schemas.application import ApplicationCreate, ApplicationRead, ApplicationReview, ApplicationReadWithSubmitter, ApplicationListResponse, ApplicationTrackResponse
+from app.schemas.application import ApplicationCreate, ApplicationRead, ApplicationReview, ApplicationBatchReview, ApplicationReadWithSubmitter, ApplicationListResponse, ApplicationTrackResponse
 from app.schemas.document import DocumentReview, DocumentRead
 from app.services.application import ApplicationService
 from app.api.deps import get_current_user, RoleChecker
@@ -18,6 +18,26 @@ allow_review_roles = RoleChecker(["admin", "officer"])
 
 def get_application_service(db: AsyncSession = Depends(get_db)) -> ApplicationService:
     return ApplicationService(db)
+
+@router.post("/public", response_model=ApplicationRead, status_code=201)
+async def submit_public_application(
+    application_in: ApplicationCreate,
+    service: ApplicationService = Depends(get_application_service)
+):
+    """Public endpoint for applicants to submit their application without signing up or logging in."""
+    application_in.user_id = None
+    return await service.create_application(application_in, bypass_duplicate_check=False)
+
+@router.post("/batch", response_model=List[ApplicationRead], status_code=201)
+async def create_applications_batch(
+    applications_in: List[ApplicationCreate],
+    current_user: Annotated[User, Depends(get_current_user)],
+    service: ApplicationService = Depends(get_application_service)
+):
+    """Endpoint for privileged users (like Org Admins) to submit multiple applications at once."""
+    if current_user.role not in ["admin", "loc_admin", "officer", "org_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized to submit batch applications.")
+    return await service.create_applications_batch(applications_in, submitter_id=current_user.id)
 
 @router.post("/", response_model=ApplicationRead, status_code=201)
 async def create_application(
@@ -108,6 +128,25 @@ async def get_application(
 ):
     return await service.get_application_by_id(application_id)
 
+@router.put("/batch/review", response_model=List[ApplicationRead])
+async def review_applications_batch(
+    review_in: ApplicationBatchReview,
+    current_user: Annotated[User, Depends(allow_review_roles)],
+    service: ApplicationService = Depends(get_application_service)
+):
+    """Bulk approve or reject multiple applications simultaneously."""
+    applications = await service.review_applications_batch(current_user.id, review_in)
+    
+    # Automatically trigger background emails for all approved applications
+    if review_in.status.lower() == "approved":
+        for app in applications:
+            send_email_notification.delay(
+                recipient_email=app.email,
+                subject="Your Accreditation Application is Approved!",
+                body=f"Congratulations {app.first_name}, your application for category {app.category} has been approved and you are now an official Participant!"
+            )
+    return applications
+
 @router.put("/{application_id}/review", response_model=ApplicationRead)
 async def review_application(
     application_id: uuid.UUID,
@@ -120,13 +159,11 @@ async def review_application(
     
     # Automatically trigger a Celery background email if the application is approved
     if review_in.status.lower() == "approved":
-        user = await db.get(User, application.user_id)
-        if user:
-            send_email_notification.delay(
-                recipient_email=user.email,
-                subject="Your Accreditation Application is Approved!",
-                body=f"Congratulations {user.first_name}, your application for category {application.category} has been approved."
-            )
+        send_email_notification.delay(
+            recipient_email=application.email,
+            subject="Your Accreditation Application is Approved!",
+            body=f"Congratulations {application.first_name}, your application for category {application.category} has been approved and you are now an official Participant!"
+        )
             
     return application
 

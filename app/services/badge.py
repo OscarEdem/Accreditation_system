@@ -1,3 +1,4 @@
+import os
 import hmac
 import hashlib
 import json
@@ -9,6 +10,7 @@ from io import BytesIO
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
+from pypdf import PdfReader, PdfWriter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from redis.asyncio import Redis
@@ -104,42 +106,79 @@ class BadgeService:
         
         return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
-    async def generate_pdf_badge(self, badge: Badge, photo_url: str | None, participant_name: str, category: str) -> bytes:
-        """Generates a CR80 size PDF badge including photo, text, and QR code."""
-        buffer = BytesIO()
-        # CR80 dimensions: 2.125 x 3.375 inches
-        width, height = 2.125 * inch, 3.375 * inch
-        c = canvas.Canvas(buffer, pagesize=(width, height))
+    async def generate_pdf_badge(self, badge: Badge, photo_url: str | None, participant_name: str, category: str, country: str) -> bytes:
+        """Generates a PDF badge by overlaying user data onto the pre-designed PDF template."""
+        # Use the exact dimensions from the provided Illustrator PDF template (4.1 x 5.8 inches)
+        width, height = 295.2, 417.6
+        
+        # 1. Create a transparent overlay with ReportLab
+        overlay_buffer = BytesIO()
+        c = canvas.Canvas(overlay_buffer, pagesize=(width, height))
 
-        # 1. Header (Background and Title)
-        c.setFillColorRGB(0.1, 0.1, 0.4)
-        c.rect(0, height - 0.5 * inch, width, 0.5 * inch, fill=1, stroke=0)
-        c.setFillColorRGB(1, 1, 1)
-        c.setFont("Helvetica-Bold", 10)
-        c.drawCentredString(width / 2, height - 0.3 * inch, "ACCRA 2026")
-
-        # 2. Participant Photo
+        # Draw Participant Photo
         if photo_url:
             async with httpx.AsyncClient() as client:
                 response = await client.get(photo_url)
                 if response.status_code == 200:
                     photo_io = BytesIO(response.content)
                     photo_img = ImageReader(photo_io)
-                    # Draw photo centered below the header
-                    c.drawImage(photo_img, (width - 1.2 * inch) / 2, height - 1.8 * inch, width=1.2 * inch, height=1.2 * inch, preserveAspectRatio=True)
+                    # Place photo in the upper/middle section (adjust inches to fit your design boxes)
+                    c.drawImage(photo_img, (width - 1.5 * inch) / 2, height - 2.5 * inch, width=1.5 * inch, height=1.5 * inch, preserveAspectRatio=True)
 
-        # 3. Participant Info
+        # Draw Participant Info with Dynamic Font Scaling for Long Names
         c.setFillColorRGB(0, 0, 0)
-        c.setFont("Helvetica-Bold", 11)
-        c.drawCentredString(width / 2, height - 2.1 * inch, participant_name)
-        c.setFont("Helvetica", 9)
-        c.drawCentredString(width / 2, height - 2.3 * inch, category.upper())
+        
+        name_font = "Helvetica-Bold"
+        name_size = 18  # Increased starting font size (was 14)
+        max_width = width - 0.4 * inch  # Leave a 0.2-inch safety margin on both sides
+        
+        while c.stringWidth(participant_name, name_font, name_size) > max_width and name_size > 8:
+            name_size -= 1
+            
+        c.setFont(name_font, name_size)
+        c.drawCentredString(width / 2, height - 2.8 * inch, participant_name)
+        
+        c.setFont("Helvetica", 11)
+        c.drawCentredString(width / 2, height - 3.05 * inch, category.upper())
 
-        # 4. HMAC QR Code
+        c.setFont("Helvetica-Oblique", 11)
+        c.drawCentredString(width / 2, height - 3.3 * inch, country.upper())
+
+        # Draw HMAC QR Code
         qr_base64 = self.generate_qr_code(badge)
         qr_img = ImageReader(BytesIO(base64.b64decode(qr_base64)))
-        c.drawImage(qr_img, (width - 1 * inch) / 2, 0.1 * inch, width=1 * inch, height=1 * inch)
+        # Place QR code near the bottom center (above the serial number)
+        c.drawImage(qr_img, (width - 1.5 * inch) / 2, 0.7 * inch, width=1.5 * inch, height=1.5 * inch)
+
+        # Draw Serial Number
+        c.setFont("Helvetica-Bold", 9)
+        c.drawCentredString(width / 2, 0.5 * inch, badge.serial_number)
 
         c.showPage()
         c.save()
-        return buffer.getvalue()
+        overlay_buffer.seek(0)
+        
+        # Calculate the absolute path to the project root to reliably find the PDF on AWS
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        template_path = os.path.join(root_dir, "accreditation.pdf")
+        
+        # 2. Merge the overlay with the original PDF template
+        template_reader = PdfReader(template_path)
+        template_page = template_reader.pages[0]  # The front design page
+        
+        overlay_reader = PdfReader(overlay_buffer)
+        overlay_page = overlay_reader.pages[0]
+        
+        # Stamp the dynamic data onto the template
+        template_page.merge_page(overlay_page)
+        
+        writer = PdfWriter()
+        writer.add_page(template_page)
+        
+        # If your template has a back page (Rules/Terms), append it to the final download!
+        if len(template_reader.pages) > 1:
+            writer.add_page(template_reader.pages[1])
+            
+        final_buffer = BytesIO()
+        writer.write(final_buffer)
+        return final_buffer.getvalue()

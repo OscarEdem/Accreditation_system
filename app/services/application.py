@@ -4,7 +4,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 from app.models.application import Application
-from app.schemas.application import ApplicationCreate, ApplicationReview
+from app.schemas.application import ApplicationCreate, ApplicationReview, ApplicationBatchReview
 from app.models.user import User
 from app.models.audit_log import AuditLog
 from app.models.document import Document
@@ -19,7 +19,11 @@ class ApplicationService:
     async def create_application(self, application_in: ApplicationCreate, bypass_duplicate_check: bool = False) -> Application:
         # Prevent double-submissions for the same user
         if not bypass_duplicate_check:
-            stmt = select(Application).where(Application.user_id == application_in.user_id)
+            if application_in.user_id:
+                stmt = select(Application).where(Application.user_id == application_in.user_id)
+            else:
+                stmt = select(Application).where(Application.email == application_in.email)
+                
             existing = await self.session.execute(stmt)
             if existing.scalars().first():
                 raise HTTPException(status_code=400, detail="You have already submitted an application.")
@@ -37,6 +41,33 @@ class ApplicationService:
         stmt = select(Application).options(selectinload(Application.documents)).where(Application.id == application.id)
         return (await self.session.execute(stmt)).scalar_one()
 
+    async def create_applications_batch(self, applications_in: list[ApplicationCreate], submitter_id: uuid.UUID | None = None) -> list[Application]:
+        apps = []
+        for app_in in applications_in:
+            app_data = app_in.model_dump(exclude={"documents"})
+            if submitter_id and not app_data.get("user_id"):
+                app_data["user_id"] = submitter_id
+            app = Application(**app_data)
+            self.session.add(app)
+            apps.append((app, app_in.documents))
+            
+        await self.session.flush()
+        
+        all_docs = []
+        for app, docs_in in apps:
+            if docs_in:
+                all_docs.extend([Document(**doc.model_dump(), application_id=app.id) for doc in docs_in])
+                
+        if all_docs:
+            self.session.add_all(all_docs)
+            
+        await self.session.commit()
+        
+        app_ids = [app.id for app, _ in apps]
+        stmt = select(Application).options(selectinload(Application.documents)).where(Application.id.in_(app_ids))
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def get_applications(
         self, 
         user_id: uuid.UUID | None = None, 
@@ -51,7 +82,7 @@ class ApplicationService:
         stmt = (
             select(Application, User.first_name, User.last_name)
             .options(selectinload(Application.documents))
-            .join(User, Application.user_id == User.id)
+            .outerjoin(User, Application.user_id == User.id)
         )
         
         if user_id:
@@ -83,7 +114,10 @@ class ApplicationService:
         applications = []
         for app, first_name, last_name in result.all():
             app_dict = {c.name: getattr(app, c.name) for c in app.__table__.columns}
-            app_dict["submitter_name"] = f"{first_name} {last_name}"
+            if first_name and last_name:
+                app_dict["submitter_name"] = f"{first_name} {last_name}"
+            else:
+                app_dict["submitter_name"] = f"{app.first_name} {app.last_name} (Self)"
             app_dict["documents"] = app.documents
             applications.append(app_dict)
         return applications, total
@@ -139,6 +173,22 @@ class ApplicationService:
         application.reviewer_comments = review_data.reviewer_comments
         application.reviewer_id = reviewer_id
         
+        # Automatically convert the Application into a Participant upon approval
+        if review_data.status.lower() == "approved" and old_status != "approved":
+            if not review_data.tournament_id:
+                raise HTTPException(status_code=400, detail="A tournament_id must be provided to approve the application and generate the participant.")
+                
+            existing = await self.session.execute(select(Participant).where(Participant.application_id == application.id))
+            if not existing.scalars().first():
+                new_participant = Participant(
+                    application_id=application.id,
+                    tournament_id=review_data.tournament_id,
+                    role=review_data.assigned_role or application.category,
+                    organization_id=application.organization_id,
+                    sporting_disciplines=application.sporting_disciplines
+                )
+                self.session.add(new_participant)
+
         # Generate an Audit Log entry if the status was changed
         if old_status != review_data.status:
             audit_log = AuditLog(
@@ -154,6 +204,53 @@ class ApplicationService:
         await self.session.commit()
         await self.session.refresh(application)
         return application
+
+    async def review_applications_batch(self, reviewer_id: uuid.UUID, review_data: ApplicationBatchReview) -> list[Application]:
+        stmt = select(Application).options(selectinload(Application.documents)).where(Application.id.in_(review_data.application_ids))
+        result = await self.session.execute(stmt)
+        applications = list(result.scalars().all())
+        
+        if not applications:
+            raise HTTPException(status_code=404, detail="No applications found.")
+
+        for application in applications:
+            old_status = application.status
+            application.status = review_data.status
+            application.reviewer_comments = review_data.reviewer_comments
+            application.reviewer_id = reviewer_id
+            
+            # Automatically convert the Application into a Participant upon approval
+            if review_data.status.lower() == "approved" and old_status != "approved":
+                if not review_data.tournament_id:
+                    raise HTTPException(status_code=400, detail="A tournament_id must be provided to approve applications and generate participants.")
+                    
+                existing = await self.session.execute(select(Participant).where(Participant.application_id == application.id))
+                if not existing.scalars().first():
+                    new_participant = Participant(
+                        application_id=application.id,
+                        tournament_id=review_data.tournament_id,
+                        role=review_data.assigned_role or application.category,
+                        organization_id=application.organization_id,
+                        sporting_disciplines=application.sporting_disciplines
+                    )
+                    self.session.add(new_participant)
+
+            # Generate an Audit Log entry if the status was changed
+            if old_status != review_data.status:
+                audit_log = AuditLog(
+                    entity_type="application",
+                    entity_id=application.id,
+                    action="status_change",
+                    old_value=old_status,
+                    new_value=review_data.status,
+                    user_id=reviewer_id
+                )
+                self.session.add(audit_log)
+                
+        await self.session.commit()
+        for app in applications:
+            await self.session.refresh(app)
+        return applications
 
     async def review_document(self, document_id: uuid.UUID, reviewer_id: uuid.UUID, review_data: DocumentReview) -> Document:
         document = await self.session.get(Document, document_id)
