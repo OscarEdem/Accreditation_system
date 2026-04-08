@@ -154,7 +154,7 @@ async def download_badge_pdf(
 
     # 2. Fetch Participant, Application, and User details
     stmt = (
-        select(User.first_name, User.last_name, Application.category, Application.photo_url, Application.country)
+        select(User.first_name, User.last_name, Application.category, Application.photo_url, Application.country, Participant.role)
         .select_from(Participant)
         .join(Application, Participant.application_id == Application.id)
         .join(User, Application.user_id == User.id)
@@ -164,7 +164,7 @@ async def download_badge_pdf(
     if not row:
         raise HTTPException(status_code=404, detail="Participant details not found.")
 
-    first_name, last_name, category, photo_url, country = row
-    pdf_bytes = await service.generate_pdf_badge(badge, photo_url, f"{first_name} {last_name}", category, country)
+    first_name, last_name, category, photo_url, country, role = row
+    pdf_bytes = await service.generate_pdf_badge(badge, photo_url, f"{first_name} {last_name}", category, country, role)
     
     return Response(content=pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="badge_{badge.serial_number}.pdf"'})

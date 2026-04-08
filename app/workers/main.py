@@ -114,6 +114,7 @@ def send_email_notification(self, recipient_email: str, subject: str, body: str)
         from_email=from_email,
         to_emails=recipient_email,
         subject=subject,
+        plain_text_content=body,
         html_content=html_body
     )
         

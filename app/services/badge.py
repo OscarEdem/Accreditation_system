@@ -6,6 +6,7 @@ import uuid
 import base64
 import qrcode
 import httpx
+from datetime import datetime, timezone
 from io import BytesIO
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
@@ -16,6 +17,11 @@ from sqlalchemy.exc import IntegrityError
 from redis.asyncio import Redis
 from app.config.settings import settings
 from app.models.badge import Badge
+
+# In-memory cache for the PDF template to prevent disk I/O on every generation
+_TEMPLATE_CACHE: bytes | None = None
+_PHOTO_CACHE: dict[str, bytes] = {}
+_PHOTO_CACHE_LAST_CLEARED: datetime = datetime.now(timezone.utc)
 
 class BadgeService:
     def __init__(self, session: AsyncSession, redis: Redis | None = None):
@@ -106,7 +112,7 @@ class BadgeService:
         
         return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
-    async def generate_pdf_badge(self, badge: Badge, photo_url: str | None, participant_name: str, category: str, country: str) -> bytes:
+    async def generate_pdf_badge(self, badge: Badge, photo_url: str | None, participant_name: str, category: str, country: str, role: str) -> bytes:
         """Generates a PDF badge by overlaying user data onto the pre-designed PDF template."""
         # Use the exact dimensions from the provided Illustrator PDF template (4.1 x 5.8 inches)
         width, height = 295.2, 417.6
@@ -115,55 +121,125 @@ class BadgeService:
         overlay_buffer = BytesIO()
         c = canvas.Canvas(overlay_buffer, pagesize=(width, height))
 
+        # Define layout configuration to avoid magic numbers
+        LAYOUT = {
+            "photo": {"x": 0.6, "y_offset": 2.7, "size": 1.8},
+            "text": {"x_ratio": 0.68, "y_name_offset": 2.6, "y_category_offset": 2.95, "y_country_offset": 3.2, "max_width": 1.8},
+            "qr": {"y": 0.9, "size": 1.4},
+            "serial": {"y": 0.65}
+        }
+        
+        # Role-based color mapping (RGB values 0.0 to 1.0)
+        ROLE_COLORS = {
+            "athlete": (0.12, 0.33, 0.61),    # Blue
+            "media": (0.85, 0.20, 0.20),      # Red
+            "loc": (0.18, 0.55, 0.22),        # Green
+            "technical": (0.90, 0.50, 0.10),  # Orange
+            "vip": (0.55, 0.20, 0.65),        # Purple
+        }
+        
+        cat_r, cat_g, cat_b = 0, 0, 0  # Default Black
+        for key, color in ROLE_COLORS.items():
+            if key in role.lower() or key in category.lower():
+                cat_r, cat_g, cat_b = color
+                break
+
         # Draw Participant Photo
         if photo_url:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(photo_url)
-                if response.status_code == 200:
-                    photo_io = BytesIO(response.content)
-                    photo_img = ImageReader(photo_io)
-                    # Place photo in the upper/middle section (adjust inches to fit your design boxes)
-                    c.drawImage(photo_img, (width - 1.5 * inch) / 2, height - 2.5 * inch, width=1.5 * inch, height=1.5 * inch, preserveAspectRatio=True)
+            global _PHOTO_CACHE, _PHOTO_CACHE_LAST_CLEARED
+            
+            # Automatically clear the local photo cache every 24 hours (86400 seconds)
+            now = datetime.now(timezone.utc)
+            if (now - _PHOTO_CACHE_LAST_CLEARED).total_seconds() > 86400:
+                _PHOTO_CACHE.clear()
+                _PHOTO_CACHE_LAST_CLEARED = now
+                
+            photo_bytes = _PHOTO_CACHE.get(photo_url)
+            
+            if not photo_bytes:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(photo_url)
+                    if response.status_code == 200:
+                        photo_bytes = response.content
+                        # Prevent unbounded memory growth by capping the cache at 200 photos
+                        if len(_PHOTO_CACHE) >= 200:
+                            _PHOTO_CACHE.pop(next(iter(_PHOTO_CACHE)))
+                        _PHOTO_CACHE[photo_url] = photo_bytes
+            
+            if photo_bytes:
+                photo_io = BytesIO(photo_bytes)
+                photo_img = ImageReader(photo_io)
+                
+                # Left-side photo box
+                photo_x = LAYOUT["photo"]["x"] * inch
+                photo_y = height - LAYOUT["photo"]["y_offset"] * inch
+                photo_size = LAYOUT["photo"]["size"] * inch
+                
+                c.drawImage(
+                    photo_img,
+                    photo_x,
+                    photo_y,
+                    width=photo_size,
+                    height=photo_size,
+                    preserveAspectRatio=True,
+                    anchor='c'
+                )
 
-        # Draw Participant Info with Dynamic Font Scaling for Long Names
+        # Right-side text column (Name is always drawn in Black)
         c.setFillColorRGB(0, 0, 0)
+        text_center_x = width * LAYOUT["text"]["x_ratio"]
         
+        # NAME (big + bold)
         name_font = "Helvetica-Bold"
-        name_size = 18  # Increased starting font size (was 14)
-        max_width = width - 0.4 * inch  # Leave a 0.2-inch safety margin on both sides
+        name_size = 16
+        max_width = LAYOUT["text"]["max_width"] * inch
         
-        while c.stringWidth(participant_name, name_font, name_size) > max_width and name_size > 8:
+        while c.stringWidth(participant_name, name_font, name_size) > max_width and name_size > 9:
             name_size -= 1
             
         c.setFont(name_font, name_size)
-        c.drawCentredString(width / 2, height - 2.8 * inch, participant_name)
+        c.drawCentredString(text_center_x, height - LAYOUT["text"]["y_name_offset"] * inch, participant_name)
         
+        # Switch to the role-specific color for Category and Country
+        c.setFillColorRGB(cat_r, cat_g, cat_b)
+
+        # CATEGORY
         c.setFont("Helvetica", 11)
-        c.drawCentredString(width / 2, height - 3.05 * inch, category.upper())
+        c.drawCentredString(text_center_x, height - LAYOUT["text"]["y_category_offset"] * inch, category.upper())
 
+        # COUNTRY
         c.setFont("Helvetica-Oblique", 11)
-        c.drawCentredString(width / 2, height - 3.3 * inch, country.upper())
+        c.drawCentredString(text_center_x, height - LAYOUT["text"]["y_country_offset"] * inch, country.upper())
 
-        # Draw HMAC QR Code
+        # Reset back to black for the QR & Serial Number
+        c.setFillColorRGB(0, 0, 0)
+
+        # QR Code (BOTTOM CENTER)
         qr_base64 = self.generate_qr_code(badge)
         qr_img = ImageReader(BytesIO(base64.b64decode(qr_base64)))
-        # Place QR code near the bottom center (above the serial number)
-        c.drawImage(qr_img, (width - 1.5 * inch) / 2, 0.7 * inch, width=1.5 * inch, height=1.5 * inch)
+        qr_size = LAYOUT["qr"]["size"] * inch
+        qr_x = (width - qr_size) / 2
+        qr_y = LAYOUT["qr"]["y"] * inch
+        c.drawImage(qr_img, qr_x, qr_y, width=qr_size, height=qr_size)
 
-        # Draw Serial Number
+        # Serial Number (just below QR)
         c.setFont("Helvetica-Bold", 9)
-        c.drawCentredString(width / 2, 0.5 * inch, badge.serial_number)
+        c.drawCentredString(width / 2, LAYOUT["serial"]["y"] * inch, badge.serial_number)
 
         c.showPage()
         c.save()
         overlay_buffer.seek(0)
         
-        # Calculate the absolute path to the project root to reliably find the PDF on AWS
-        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        template_path = os.path.join(root_dir, "accreditation.pdf")
+        global _TEMPLATE_CACHE
+        if _TEMPLATE_CACHE is None:
+            # Calculate the absolute path to the project root to reliably find the PDF on AWS
+            root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            template_path = os.path.join(root_dir, "accreditation.pdf")
+            with open(template_path, "rb") as f:
+                _TEMPLATE_CACHE = f.read()
         
         # 2. Merge the overlay with the original PDF template
-        template_reader = PdfReader(template_path)
+        template_reader = PdfReader(BytesIO(_TEMPLATE_CACHE))
         template_page = template_reader.pages[0]  # The front design page
         
         overlay_reader = PdfReader(overlay_buffer)

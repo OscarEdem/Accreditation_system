@@ -11,6 +11,11 @@ class OrganizationBase(BaseModel):
 class OrganizationCreate(OrganizationBase):
     pass
 
+class OrganizationUpdate(BaseModel):
+    name: Optional[str] = None
+    type: Optional[str] = None
+    country: Optional[str] = None
+
 class OrganizationRead(OrganizationBase):
     id: uuid.UUID
     created_at: datetime

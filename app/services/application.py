@@ -2,6 +2,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
+from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
 from app.models.application import Application
 from app.schemas.application import ApplicationCreate, ApplicationReview, ApplicationBatchReview
@@ -201,9 +202,13 @@ class ApplicationService:
             )
             self.session.add(audit_log)
             
-        await self.session.commit()
-        await self.session.refresh(application)
-        return application
+        try:
+            await self.session.commit()
+            await self.session.refresh(application)
+            return application
+        except IntegrityError:
+            await self.session.rollback()
+            raise HTTPException(status_code=400, detail="Invalid tournament ID provided. Please ensure the selected tournament exists.")
 
     async def review_applications_batch(self, reviewer_id: uuid.UUID, review_data: ApplicationBatchReview) -> list[Application]:
         stmt = select(Application).options(selectinload(Application.documents)).where(Application.id.in_(review_data.application_ids))
@@ -247,10 +252,14 @@ class ApplicationService:
                 )
                 self.session.add(audit_log)
                 
-        await self.session.commit()
-        for app in applications:
-            await self.session.refresh(app)
-        return applications
+        try:
+            await self.session.commit()
+            for app in applications:
+                await self.session.refresh(app)
+            return applications
+        except IntegrityError:
+            await self.session.rollback()
+            raise HTTPException(status_code=400, detail="Invalid tournament ID provided. Please ensure the selected tournament exists.")
 
     async def review_document(self, document_id: uuid.UUID, reviewer_id: uuid.UUID, review_data: DocumentReview) -> Document:
         document = await self.session.get(Document, document_id)
