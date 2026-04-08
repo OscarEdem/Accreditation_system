@@ -75,7 +75,7 @@ Logic:
 - An `officer` fetches paginated, filterable applications (by status, category, etc.).
 - CSV Export: Admins can hit the `/export` endpoint to download a dynamically filtered 
   CSV spreadsheet of applications.
-- The officer updates the status (e.g., "pending" -> "approved") via a PATCH request.
+- Officers can update application statuses individually or in bulk via batch review endpoints.
 - Document Review: Officers can reject *specific* documents without rejecting the 
   entire application, automatically emailing the user to re-upload just that file.
 - Audit Logging: The system detects the status change and automatically creates a 
@@ -94,10 +94,18 @@ Logic:
   2. Cryptographic Signature (Zero-Trust): The system concatenates the participant ID 
      and serial number, and hashes it using HMAC-SHA256 and the server's SECRET_KEY.
   3. The badge is saved to the database as "active".
-  4. PDF Generation: ReportLab generates a CR80-sized (2.125 x 3.375 inch) PDF. 
-     It fetches the user's photo from S3, prints their name/category, and embeds 
-     a QR code containing the Participant ID, Serial, and HMAC Signature.
+  4. PDF Generation: The system fetches the user's photo from S3 (caching it in RAM), 
+     crops it to a perfect square, and uses ReportLab to draw the data onto a transparent 
+     layer. PyPDF then stamps this layer perfectly onto a pre-designed Adobe Illustrator 
+     template (`accreditation.pdf`) using strict point-based coordinates.
   5. Celery dispatches an email to the user with a link to download their PDF badge.
+- High-Performance PDF Caching: 
+  To prevent disk I/O and S3 network latency during bulk badge generation:
+  1. The Adobe Illustrator template is cached in memory on the first read.
+  2. S3 photos are cached locally (capped at 200 images to prevent OOM crashes).
+  3. Auto-Clearing: A zero-overhead "lazy evaluation" timer automatically wipes the 
+     photo cache if 24 hours have passed since the last clear, preventing memory leaks 
+     without requiring a dedicated background Celery worker.
 - Badge Revocation: Admins can change a badge status to "revoked". This instantly 
   triggers a wildcard Redis delete (`scan:{participant_id}:*`) to wipe their access 
   from all venue gates worldwide in milliseconds.
@@ -146,7 +154,9 @@ Logic:
 - The `/stats` endpoint uses optimized PostgreSQL aggregations (`func.count()`) to 
   calculate total applications, approved vs pending counts, and total granted/denied 
   scans in real-time.
-- All GET list endpoints (Applications, Participants, Organizations) return a unified 
+- Historical Scan Logs: The `/scan/logs` endpoint provides a paginated, filterable 
+  history of all gate check-ins (by date, zone, or access status) for deep security auditing.
+- All GET list endpoints (Applications, Participants, Organizations, Scans) return a unified 
   wrapper `{"total": int, "items": [...]}` to support frontend pagination.
 
 ### 3.10 Communications & Webhooks (SES/SNS)

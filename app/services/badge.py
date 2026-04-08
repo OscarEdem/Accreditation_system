@@ -8,6 +8,7 @@ import qrcode
 import httpx
 from datetime import datetime, timezone
 from io import BytesIO
+from PIL import Image
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
@@ -121,12 +122,12 @@ class BadgeService:
         overlay_buffer = BytesIO()
         c = canvas.Canvas(overlay_buffer, pagesize=(width, height))
 
-        # Define layout configuration to avoid magic numbers
+        # Define layout configuration in exact points (1 inch = 72 points) aligned to the Illustrator template
         LAYOUT = {
-            "photo": {"x": 0.6, "y_offset": 2.7, "size": 1.8},
-            "text": {"x_ratio": 0.68, "y_name_offset": 2.6, "y_category_offset": 2.95, "y_country_offset": 3.2, "max_width": 1.8},
-            "qr": {"y": 0.9, "size": 1.4},
-            "serial": {"y": 0.65}
+            "photo": {"x": 38, "y": 235, "size": 140},
+            "text": {"center_x": 200, "name_y": 250, "category_y": 225, "country_y": 205, "max_width": 130},
+            "qr": {"x": (width - 95) / 2, "y": 75, "size": 95},
+            "serial": {"x": width / 2, "y": 55}
         }
         
         # Role-based color mapping (RGB values 0.0 to 1.0)
@@ -167,49 +168,52 @@ class BadgeService:
                         _PHOTO_CACHE[photo_url] = photo_bytes
             
             if photo_bytes:
-                photo_io = BytesIO(photo_bytes)
-                photo_img = ImageReader(photo_io)
+                # 1. Crop image to a perfect square to prevent floating or squishing
+                img = Image.open(BytesIO(photo_bytes)).convert("RGB")
+                w, h = img.size
+                min_dim = min(w, h)
+                img = img.crop((
+                    (w - min_dim) // 2,
+                    (h - min_dim) // 2,
+                    (w + min_dim) // 2,
+                    (h + min_dim) // 2
+                ))
+                img = img.resize((500, 500))
                 
-                # Left-side photo box
-                photo_x = LAYOUT["photo"]["x"] * inch
-                photo_y = height - LAYOUT["photo"]["y_offset"] * inch
-                photo_size = LAYOUT["photo"]["size"] * inch
+                # 2. Save back to BytesIO for ReportLab
+                cropped_io = BytesIO()
+                img.save(cropped_io, format="JPEG")
+                cropped_io.seek(0)
+                photo_img = ImageReader(cropped_io)
                 
-                c.drawImage(
-                    photo_img,
-                    photo_x,
-                    photo_y,
-                    width=photo_size,
-                    height=photo_size,
-                    preserveAspectRatio=True,
-                    anchor='c'
-                )
+                # 3. Draw exactly into the printed frame
+                c.drawImage(photo_img, LAYOUT["photo"]["x"], LAYOUT["photo"]["y"], width=LAYOUT["photo"]["size"], height=LAYOUT["photo"]["size"])
 
-        # Right-side text column (Name is always drawn in Black)
+        # Right-side text column (aligned to specific box, not arbitrarily centered)
         c.setFillColorRGB(0, 0, 0)
-        text_center_x = width * LAYOUT["text"]["x_ratio"]
+        text_center_x = LAYOUT["text"]["center_x"]
         
         # NAME (big + bold)
         name_font = "Helvetica-Bold"
         name_size = 16
-        max_width = LAYOUT["text"]["max_width"] * inch
+        max_width = LAYOUT["text"]["max_width"]
         
         while c.stringWidth(participant_name, name_font, name_size) > max_width and name_size > 9:
             name_size -= 1
             
         c.setFont(name_font, name_size)
-        c.drawCentredString(text_center_x, height - LAYOUT["text"]["y_name_offset"] * inch, participant_name)
+        c.drawCentredString(text_center_x, LAYOUT["text"]["name_y"], participant_name)
         
         # Switch to the role-specific color for Category and Country
         c.setFillColorRGB(cat_r, cat_g, cat_b)
 
         # CATEGORY
         c.setFont("Helvetica", 11)
-        c.drawCentredString(text_center_x, height - LAYOUT["text"]["y_category_offset"] * inch, category.upper())
+        c.drawCentredString(text_center_x, LAYOUT["text"]["category_y"], category.upper())
 
         # COUNTRY
         c.setFont("Helvetica-Oblique", 11)
-        c.drawCentredString(text_center_x, height - LAYOUT["text"]["y_country_offset"] * inch, country.upper())
+        c.drawCentredString(text_center_x, LAYOUT["text"]["country_y"], country.upper())
 
         # Reset back to black for the QR & Serial Number
         c.setFillColorRGB(0, 0, 0)
@@ -217,14 +221,11 @@ class BadgeService:
         # QR Code (BOTTOM CENTER)
         qr_base64 = self.generate_qr_code(badge)
         qr_img = ImageReader(BytesIO(base64.b64decode(qr_base64)))
-        qr_size = LAYOUT["qr"]["size"] * inch
-        qr_x = (width - qr_size) / 2
-        qr_y = LAYOUT["qr"]["y"] * inch
-        c.drawImage(qr_img, qr_x, qr_y, width=qr_size, height=qr_size)
+        c.drawImage(qr_img, LAYOUT["qr"]["x"], LAYOUT["qr"]["y"], width=LAYOUT["qr"]["size"], height=LAYOUT["qr"]["size"])
 
         # Serial Number (just below QR)
         c.setFont("Helvetica-Bold", 9)
-        c.drawCentredString(width / 2, LAYOUT["serial"]["y"] * inch, badge.serial_number)
+        c.drawCentredString(LAYOUT["serial"]["x"], LAYOUT["serial"]["y"], badge.serial_number)
 
         c.showPage()
         c.save()

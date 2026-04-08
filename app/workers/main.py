@@ -12,7 +12,7 @@ from sqlalchemy import text
 from redis.asyncio import Redis
 from botocore.exceptions import ClientError
 from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
+from sendgrid.helpers.mail import Mail, Content
 from app.config.settings import settings
 from app.core.email import generate_html_email
 
@@ -113,10 +113,12 @@ def send_email_notification(self, recipient_email: str, subject: str, body: str)
     message = Mail(
         from_email=from_email,
         to_emails=recipient_email,
-        subject=subject,
-        plain_text_content=body,
-        html_content=html_body
+        subject=subject
     )
+    
+    # Explicitly define MIME types for maximum email client compatibility
+    message.add_content(Content("text/plain", body))
+    message.add_content(Content("text/html", html_body))
         
     try:
         sg = SendGridAPIClient(sendgrid_api_key)

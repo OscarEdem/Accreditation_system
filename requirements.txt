@@ -16,7 +16,7 @@ pydantic-settings[dotenv]>=2.0.3  # Required to parse .env files
 passlib>=1.7.4           # Password hashing
 pyjwt>=2.8.0             # JWT token generation/validation
 
-# Caching (Optional/Future)
+# Caching, Pub/Sub & Background Tasks
 redis>=5.0.1
 celery>=5.3.6            # Background task worker
 boto3>=1.33.0            # AWS SDK for S3 integration
