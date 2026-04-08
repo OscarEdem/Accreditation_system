@@ -6,5 +6,7 @@ class Organization(BaseModel):
     __tablename__ = "organizations"
 
     name: Mapped[str] = mapped_column(String, index=True)
+    type: Mapped[str | None] = mapped_column(String, nullable=True)
+    country: Mapped[str | None] = mapped_column(String, nullable=True)
 
     participants = relationship("Participant", back_populates="organization")

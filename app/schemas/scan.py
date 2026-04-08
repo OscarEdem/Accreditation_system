@@ -1,5 +1,7 @@
 import uuid
-from pydantic import BaseModel
+from datetime import datetime
+from typing import List, Optional
+from pydantic import BaseModel, ConfigDict
 from enum import Enum
 
 class ScanDirection(str, Enum):
@@ -26,3 +28,20 @@ class ScanParticipantProfile(BaseModel):
     role: str
     organization_name: str | None = None
     badge_status: str | None = None
+
+class ScanLogRead(BaseModel):
+    id: uuid.UUID
+    participant_id: Optional[uuid.UUID] = None
+    zone_id: uuid.UUID
+    scanner_id: uuid.UUID
+    access_granted: bool
+    reason: Optional[str] = None
+    direction: str
+    created_at: datetime
+    participant_name: str = "Unknown / Forged"
+    zone_name: str
+    scanner_name: str
+
+class ScanLogListResponse(BaseModel):
+    total: int
+    items: List[ScanLogRead]

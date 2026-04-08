@@ -6,47 +6,29 @@ from fastapi import APIRouter, Request, status, Response
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-@router.post("/ses")
-async def ses_notification_webhook(request: Request):
+@router.post("/sendgrid")
+async def sendgrid_webhook(request: Request):
     """
-    Webhook to receive Bounce and Complaint notifications from Amazon SNS (triggered by SES).
+    Webhook to receive Bounce, Dropped, and Spam Complaint notifications from SendGrid.
     """
     try:
-        # SNS sends data as text/plain, so we must parse the raw body
         body = await request.body()
         payload = json.loads(body)
     except json.JSONDecodeError:
-        logger.error("Failed to decode SNS webhook payload")
+        logger.error("Failed to decode SendGrid webhook payload")
         return Response(status_code=status.HTTP_400_BAD_REQUEST)
 
-    message_type = payload.get("Type")
-    
-    # 1. Handle SNS Subscription Confirmation
-    if message_type == "SubscriptionConfirmation":
-        subscribe_url = payload.get("SubscribeURL")
-        if subscribe_url:
-            logger.info(f"Confirming SES/SNS Subscription: {subscribe_url}")
-            async with httpx.AsyncClient() as client:
-                await client.get(subscribe_url)
-        return Response(status_code=status.HTTP_200_OK)
-
-    # 2. Handle Actual Notifications (Bounces & Complaints)
-    if message_type == "Notification":
-        message_str = payload.get("Message", "{}")
-        try:
-            message_data = json.loads(message_str)
-            notification_type = message_data.get("notificationType")
+    # SendGrid sends an array of events
+    if isinstance(payload, list):
+        for event in payload:
+            event_type = event.get("event")
+            email = event.get("email")
             
-            if notification_type == "Bounce":
-                bounced_recipients = message_data.get("bounce", {}).get("bouncedRecipients", [])
-                for recipient in bounced_recipients:
-                    email = recipient.get("emailAddress")
-                    logger.warning(f"SES BOUNCE DETECTED for email: {email}")
-                    # TODO: Update database to flag this user/application email as invalid
-                    
-            elif notification_type == "Complaint":
-                logger.warning("SES SPAM COMPLAINT DETECTED")
-        except json.JSONDecodeError:
-            logger.error("Failed to decode inner SNS Message")
-            
+            if event_type in ["bounce", "dropped"]:
+                logger.warning(f"SENDGRID BOUNCE/DROP DETECTED for email: {email}")
+                # TODO: Update database to flag this user/application email as invalid
+                
+            elif event_type == "spamreport":
+                logger.warning(f"SENDGRID SPAM COMPLAINT DETECTED for email: {email}")
+                
     return Response(status_code=status.HTTP_200_OK)

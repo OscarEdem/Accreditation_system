@@ -7,6 +7,7 @@ class TournamentBase(BaseModel):
     name: str
     start_date: date
     end_date: date
+    host_city: str
     venue_id: uuid.UUID
     description: Optional[str] = None
 

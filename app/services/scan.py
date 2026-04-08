@@ -5,11 +5,13 @@ import hmac
 import hashlib
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from redis.asyncio import Redis
 from app.models.participant import Participant
 from app.models.application import Application
 from app.models.scan_log import ScanLog
+from app.models.zone import Zone
+from app.models.user import User
 from app.models.zone_access import ZoneAccess
 from app.models.organization import Organization
 from app.models.badge import Badge
@@ -167,3 +169,59 @@ class ScanService:
             "organization_name": row.organization_name,
             "badge_status": row.badge_status
         }
+
+    async def get_scan_logs(
+        self, 
+        skip: int = 0, 
+        limit: int = 100, 
+        zone_id: uuid.UUID | None = None, 
+        participant_id: uuid.UUID | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+        access_granted: bool | None = None
+    ) -> tuple[list[dict], int]:
+        count_stmt = select(func.count(ScanLog.id))
+        
+        stmt = (
+            select(
+                ScanLog, 
+                Application.first_name, Application.last_name,
+                Zone.name.label("zone_name"),
+                User.first_name.label("scanner_first"), User.last_name.label("scanner_last")
+            )
+            .outerjoin(Participant, ScanLog.participant_id == Participant.id)
+            .outerjoin(Application, Participant.application_id == Application.id)
+            .join(Zone, ScanLog.zone_id == Zone.id)
+            .join(User, ScanLog.scanner_id == User.id)
+        )
+
+        if zone_id:
+            count_stmt = count_stmt.where(ScanLog.zone_id == zone_id)
+            stmt = stmt.where(ScanLog.zone_id == zone_id)
+        if participant_id:
+            count_stmt = count_stmt.where(ScanLog.participant_id == participant_id)
+            stmt = stmt.where(ScanLog.participant_id == participant_id)
+        if start_date:
+            count_stmt = count_stmt.where(ScanLog.created_at >= start_date)
+            stmt = stmt.where(ScanLog.created_at >= start_date)
+        if end_date:
+            count_stmt = count_stmt.where(ScanLog.created_at <= end_date)
+            stmt = stmt.where(ScanLog.created_at <= end_date)
+        if access_granted is not None:
+            count_stmt = count_stmt.where(ScanLog.access_granted == access_granted)
+            stmt = stmt.where(ScanLog.access_granted == access_granted)
+
+        total = (await self.session.execute(count_stmt)).scalar() or 0
+
+        stmt = stmt.order_by(ScanLog.created_at.desc()).offset(skip).limit(limit)
+        result = await self.session.execute(stmt)
+
+        logs = []
+        for scan_log, p_first, p_last, z_name, s_first, s_last in result.all():
+            log_dict = {c.name: getattr(scan_log, c.name) for c in scan_log.__table__.columns}
+            log_dict["participant_name"] = f"{p_first} {p_last}" if p_first and p_last else "Unknown / Forged"
+            log_dict["zone_name"] = z_name
+            log_dict["scanner_name"] = f"{s_first} {s_last}"
+            logs.append(log_dict)
+            
+        return logs, total

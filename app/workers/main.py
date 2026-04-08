@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
 from redis.asyncio import Redis
 from botocore.exceptions import ClientError
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 from app.config.settings import settings
 from app.core.email import generate_html_email
 
@@ -95,54 +97,34 @@ def init_worker(**kwargs):
 
 @celery_app.task(name="send_email_notification", bind=True, max_retries=3)
 def send_email_notification(self, recipient_email: str, subject: str, body: str):
-    """Background task to send email notifications to users using AWS SES."""
+    """Background task to send email notifications to users using SendGrid."""
     logger.info(f"Preparing to send email to {recipient_email} - Subject: {subject}")
     
-    if not settings.AWS_SES_SENDER:
-        logger.warning("AWS_SES_SENDER is not configured. Simulating email send.")
+    sendgrid_api_key = os.getenv("SENDGRID_API_KEY")
+    from_email = os.getenv("SENDGRID_FROM_EMAIL", "noreply@asac2026.org")
+    
+    if not sendgrid_api_key:
+        logger.warning("SENDGRID_API_KEY is not configured. Simulating email send.")
         time.sleep(2)
         return {"status": "simulated", "recipient": recipient_email}
         
     html_body = generate_html_email(subject, body)
+    
+    message = Mail(
+        from_email=from_email,
+        to_emails=recipient_email,
+        subject=subject,
+        html_content=html_body
+    )
         
     try:
-        ses_client = boto3.client(
-            "ses",
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.SES_REGION
-        )
+        sg = SendGridAPIClient(sendgrid_api_key)
+        response = sg.send(message)
         
-        response = ses_client.send_email(
-            Source=settings.AWS_SES_SENDER,
-            Destination={
-                'ToAddresses': [recipient_email]
-            },
-            Message={
-                'Subject': {
-                    'Data': subject,
-                    'Charset': 'UTF-8'
-                },
-                'Body': {
-                    'Text': {
-                        'Data': body,
-                        'Charset': 'UTF-8'
-                    },
-                    'Html': {
-                        'Data': html_body,
-                        'Charset': 'UTF-8'
-                    }
-                }
-            }
-        )
-        
-        logger.info(f"Successfully sent email to {recipient_email}. Message ID: {response.get('MessageId')}")
-        return {"status": "success", "recipient": recipient_email, "message_id": response.get("MessageId")}
-    except ClientError as e:
-        logger.error(f"AWS SES Error sending email to {recipient_email}: {e.response['Error']['Message']}")
-        raise self.retry(exc=e, countdown=60)
+        logger.info(f"Successfully sent SendGrid email to {recipient_email}. Status Code: {response.status_code}")
+        return {"status": "success", "recipient": recipient_email, "status_code": response.status_code}
     except Exception as exc:
-        logger.error(f"Failed to send email to {recipient_email}: {exc}")
+        logger.error(f"Failed to send email to {recipient_email} via SendGrid: {exc}")
         # Retry the task in 60 seconds in case of transient network issues
         raise self.retry(exc=exc, countdown=60)
 

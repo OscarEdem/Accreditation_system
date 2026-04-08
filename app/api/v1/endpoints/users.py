@@ -107,13 +107,17 @@ async def clear_database(
         "categories",
         "zones",
         "audit_logs",
-        "organizations"
     ]
     
+    # 1. Truncate all transactional tables (removes foreign key constraints on users and orgs)
     truncate_query = f"TRUNCATE {', '.join(tables_to_clear)} CASCADE;"
-    
     await db.execute(text(truncate_query))
-    await db.execute(text("DELETE FROM users WHERE role != 'admin'"))
+    
+    # 2. Delete all users except admins and loc_admins
+    await db.execute(text("DELETE FROM users WHERE role NOT IN ('admin', 'loc_admin')"))
+    
+    # 3. Delete all organizations now that users are cleared
+    await db.execute(text("DELETE FROM organizations"))
     await db.commit()
     
     return {"message": "Database wiped successfully. Only admin users remain."}

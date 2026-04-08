@@ -23,10 +23,11 @@ async def create_tournament(
     name: str = Form(...),
     start_date: date = Form(...),
     end_date: date = Form(...),
+    host_city: str = Form(...),
     venue_id: uuid.UUID = Form(...),
     description: str | None = Form(None)
 ):
-    tournament_in = TournamentCreate(name=name, start_date=start_date, end_date=end_date, venue_id=venue_id, description=description)
+    tournament_in = TournamentCreate(name=name, start_date=start_date, end_date=end_date, host_city=host_city, venue_id=venue_id, description=description)
     return await service.create_tournament(tournament_in)
 
 @router.get("/", response_model=List[TournamentRead])

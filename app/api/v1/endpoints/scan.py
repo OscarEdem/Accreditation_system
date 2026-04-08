@@ -2,6 +2,7 @@ import logging
 import uuid
 import asyncio
 import jwt
+from datetime import datetime
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +12,7 @@ from app.db.session import get_db
 from app.db.redis import get_redis
 from app.api.deps import get_current_user, RoleChecker
 from app.models.user import User
-from app.schemas.scan import ScanRequest, ScanResponse, ScanParticipantProfile
+from app.schemas.scan import ScanRequest, ScanResponse, ScanParticipantProfile, ScanLogListResponse
 from app.services.scan import ScanService
 from app.config.settings import settings
 
@@ -62,6 +63,30 @@ async def get_participant_profile(
     if not profile:
         raise HTTPException(status_code=404, detail="Participant not found")
     return profile
+
+@router.get("/logs", response_model=ScanLogListResponse, status_code=200)
+async def get_scan_logs(
+    current_user: Annotated[User, Depends(allow_scan_roles)],
+    service: ScanService = Depends(get_scan_service),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page"),
+    zone_id: uuid.UUID | None = Query(None, description="Filter by zone ID"),
+    participant_id: uuid.UUID | None = Query(None, description="Filter by participant ID"),
+    start_date: datetime | None = Query(None, description="Filter from this start date (ISO 8601)"),
+    end_date: datetime | None = Query(None, description="Filter up to this end date (ISO 8601)"),
+    access_granted: bool | None = Query(None, description="Filter by access granted status (true/false)")
+):
+    skip = (page - 1) * limit
+    items, total = await service.get_scan_logs(
+        skip=skip, 
+        limit=limit, 
+        zone_id=zone_id, 
+        participant_id=participant_id,
+        start_date=start_date,
+        end_date=end_date,
+        access_granted=access_granted
+    )
+    return {"total": total, "items": items}
 
 @router.websocket("/live-alerts")
 async def scan_live_alerts(
