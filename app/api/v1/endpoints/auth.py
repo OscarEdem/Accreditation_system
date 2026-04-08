@@ -27,16 +27,36 @@ allow_admin = RoleChecker(["admin", "loc_admin"])
 def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
     return UserService(db)
 
-@router.post("/register", response_model=UserRead, status_code=201)
+@router.post("/register", response_model=UserRead, status_code=201, summary="Register a New Applicant")
 async def register_user(user_in: UserCreate, service: UserService = Depends(get_user_service)):
+    """
+    Registers a new public user. The system will forcibly assign the `applicant` role 
+    for security purposes.
+    """
     return await service.create_user(user_in)
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=Token, summary="Login & Get Access Token")
 async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     service: UserService = Depends(get_user_service),
     redis: Redis = Depends(get_redis)
 ):
+    """
+    Authenticates a user and returns a JWT Bearer token valid for 30 minutes.
+    
+    **Frontend Implementation Notes:**
+    - **IMPORTANT:** This endpoint expects `application/x-www-form-urlencoded` data, NOT standard JSON!
+    - Use `URLSearchParams` or `FormData` when calling this via `fetch` or `axios`.
+    
+    **Example (Fetch API):**
+    ```javascript
+    const params = new URLSearchParams();
+    params.append('username', 'user@example.com');
+    params.append('password', 'secret123');
+    
+    fetch('/api/v1/auth/login', { method: 'POST', body: params });
+    ```
+    """
     user = await service.authenticate_user(form_data.username, form_data.password)
     if not user:
         raise HTTPException(
@@ -56,11 +76,20 @@ async def login_for_access_token(
     access_token = create_access_token(data={"sub": user.email, "session_id": session_id}, expires_delta=access_token_expires)
     return Token(access_token=access_token, token_type="bearer")
 
-@router.get("/me", response_model=UserMeResponse)
+@router.get("/me", response_model=UserMeResponse, summary="Get Current User Profile")
 async def read_users_me(
     current_user: Annotated[User, Depends(get_current_user)],
     db: AsyncSession = Depends(get_db)
 ):
+    """
+    Retrieves the profile of the currently authenticated user.
+    
+    **Frontend Implementation Notes:**
+    - Pass the JWT token in the `Authorization: Bearer <token>` header.
+    - This endpoint returns `organization_name` and an array of `allowed_categories`.
+    - **Use Case:** Use `allowed_categories` to dynamically filter the Categories dropdown 
+      in the frontend application form so users only see options their organization is permitted to apply for!
+    """
     org_name = None
     allowed_categories = []
     if current_user.organization_id:

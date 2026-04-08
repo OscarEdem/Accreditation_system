@@ -24,13 +24,30 @@ allow_review_roles = RoleChecker(["admin", "officer"])
 def get_application_service(db: AsyncSession = Depends(get_db)) -> ApplicationService:
     return ApplicationService(db)
 
-@router.post("/public", response_model=ApplicationRead, status_code=201)
+@router.post("/public", response_model=ApplicationRead, status_code=201, summary="Submit Public Application")
 async def submit_public_application(
     application_in: ApplicationCreate,
     service: ApplicationService = Depends(get_application_service),
     db: AsyncSession = Depends(get_db)
 ):
-    """Public endpoint for applicants to submit their application without signing up or logging in."""
+    """
+    Public endpoint for applicants to submit their application without needing a JWT token.
+    
+    **Frontend Implementation Notes:**
+    - Used at the end of the public multi-step form wizard.
+    - `category` must exactly match one of the system's allowed category strings.
+    - `organization_id` must be provided if the user belongs to a specific team (e.g., Team Ghana).
+    
+    **Example JSON Payload:**
+    ```json
+    {
+      "first_name": "John",
+      "last_name": "Doe",
+      "category": "Athlete",
+      "tournament_id": "123e4567-e89b-12d3-a456-426614174000"
+    }
+    ```
+    """
     category_exists = await db.scalar(select(Category).where(Category.name == application_in.category))
     if not category_exists:
         raise HTTPException(status_code=400, detail=f"Category '{application_in.category}' does not exist in the system.")
@@ -59,14 +76,20 @@ async def submit_public_application(
     
     return application
 
-@router.post("/batch", response_model=List[ApplicationRead], status_code=201)
+@router.post("/batch", response_model=List[ApplicationRead], status_code=201, summary="Submit Multiple Applications")
 async def create_applications_batch(
     applications_in: List[ApplicationCreate],
     current_user: Annotated[User, Depends(get_current_user)],
     service: ApplicationService = Depends(get_application_service),
     db: AsyncSession = Depends(get_db)
 ):
-    """Endpoint for privileged users (like Org Admins) to submit multiple applications at once."""
+    """
+    Endpoint for privileged users (like `org_admin`) to submit multiple applications simultaneously.
+    
+    **Frontend Implementation Notes:**
+    - Pass an array `[]` of application objects in the JSON body.
+    - Org Admins bypass duplicate checks, meaning they can submit multiple applications under their own account for their team members.
+    """
     if current_user.role not in ["admin", "loc_admin", "officer", "org_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized to submit batch applications.")
 
@@ -182,16 +205,16 @@ async def export_applications_csv(
     response.headers["Content-Disposition"] = 'attachment; filename="applications_export.csv"'
     return response
 
-@router.get("/track/status", response_model=ApplicationTrackResponse)
+@router.get("/track/status", response_model=ApplicationTrackResponse, summary="Public Status Tracker")
 async def track_application_status(
     email: str | None = Query(None, description="Registered email address"),
     reference_number: str | None = Query(None, description="Application reference number (UUID)"),
     service: ApplicationService = Depends(get_application_service)
 ):
-    """Public endpoint to track application and badge status."""
+    """Allows a user to track their application status using their email or UUID on the public portal."""
     return await service.track_application_status(email=email, reference_number=reference_number)
 
-@router.get("/", response_model=ApplicationListResponse)
+@router.get("/", response_model=ApplicationListResponse, summary="List Applications (Paginated)")
 async def get_applications(
     current_user: Annotated[User, Depends(get_current_user)],
     service: ApplicationService = Depends(get_application_service),
@@ -202,6 +225,14 @@ async def get_applications(
     organization_id: uuid.UUID | None = Query(None, description="Filter by organization ID"),
     sort_desc: bool = Query(True, description="Sort by submitted_at descending")
 ):
+    """
+    Retrieves a paginated list of applications for the Admin Dashboard Data Tables.
+    
+    **Frontend Implementation Notes:**
+    - Security is handled automatically: Applicants only see their own, Org Admins see their team's, Admins see all.
+    - Pass `page` and `limit` query parameters to handle pagination UI.
+    - Pass `status` (e.g., `?status=pending`) or `category` to filter the table.
+    """
     skip = (page - 1) * limit
     
     # Resolve user filter constraint: admins see all, applicants see their own

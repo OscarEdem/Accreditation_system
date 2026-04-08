@@ -67,14 +67,19 @@ async def get_zone_capacity(
 ):
     return await service.get_zone_capacity(zone_id)
 
-@router.get("/venue/{venue_id}/access-matrix", response_model=list[ZoneMatrixItem])
+@router.get("/venue/{venue_id}/access-matrix", response_model=list[ZoneMatrixItem], summary="Get Venue Access Matrix")
 async def get_venue_access_matrix(
     venue_id: uuid.UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Fetches all active access rules for a specific venue to hydrate the Matrix checkboxes.
+    Fetches all active access rules for a specific venue.
+    
+    **Frontend Implementation Notes:**
+    - Call this endpoint ONCE when the Access Matrix page loads.
+    - It returns an array of objects mapping `zone_id` to `category_id`.
+    - **Usage:** Loop through these pairs to pre-check the specific cells in your frontend data grid!
     """
     stmt = (
         select(ZoneAccess)
@@ -84,7 +89,7 @@ async def get_venue_access_matrix(
     result = await db.execute(stmt)
     return result.scalars().all()
 
-@router.post("/{zone_id}/access/toggle", response_model=ZoneAccessToggleResponse)
+@router.post("/{zone_id}/access/toggle", response_model=ZoneAccessToggleResponse, summary="Toggle Matrix Checkbox")
 async def toggle_zone_access(
     zone_id: uuid.UUID,
     request: ZoneAccessCreate,
@@ -93,8 +98,20 @@ async def toggle_zone_access(
     redis: Redis = Depends(get_redis)
 ):
     """
-    Toggles access for a category to a zone. 
-    If access exists, it removes it. If not, it grants it.
+    Toggles access for a category to a specific zone in real-time.
+    
+    **Frontend Implementation Notes:**
+    - Call this endpoint EVERY TIME an admin clicks a checkbox cell in the Access Matrix.
+    - If the category already has access, this will **revoke** it. 
+    - If the category does not have access, this will **grant** it.
+    - The backend handles cache invalidation and Audit Logging automatically.
+    
+    **Example Body:**
+    ```json
+    {
+      "category_id": "123e4567-e89b-12d3-a456-426614174000"
+    }
+    ```
     """
     stmt = select(ZoneAccess).where(
         ZoneAccess.zone_id == zone_id,

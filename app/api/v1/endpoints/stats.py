@@ -14,9 +14,10 @@ allow_admin = RoleChecker(["admin", "loc_admin"])
 def get_stats_service(db: AsyncSession = Depends(get_db)) -> StatsService:
     return StatsService(db)
 
-@router.get("/", response_model=DashboardStats)
+@router.get("/", response_model=DashboardStats, summary="Get Live Dashboard Metrics")
 async def get_dashboard_stats(
     current_user: Annotated[User, Depends(allow_admin)],
     service: StatsService = Depends(get_stats_service)
 ):
+    """Returns real-time PostgreSQL aggregations to populate the top cards on the Admin Dashboard."""
     return await service.get_dashboard_stats()

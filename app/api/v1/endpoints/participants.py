@@ -13,7 +13,7 @@ router = APIRouter()
 def get_participant_service(db: AsyncSession = Depends(get_db)) -> ParticipantService:
     return ParticipantService(db)
 
-@router.get("/", response_model=ParticipantListResponse)
+@router.get("/", response_model=ParticipantListResponse, summary="List Participants (Paginated)")
 async def get_participants(
     current_user: Annotated[User, Depends(get_current_user)],
     service: ParticipantService = Depends(get_participant_service),
@@ -22,6 +22,9 @@ async def get_participants(
     tournament_id: uuid.UUID | None = Query(None, description="Filter by tournament ID"),
     role: str | None = Query(None, description="Filter by role")
 ):
+    """
+    Fetch a list of fully approved participants. Use this for the Participants table in the admin dashboard.
+    """
     skip = (page - 1) * limit
     items, total = await service.get_participants(
         tournament_id=tournament_id,

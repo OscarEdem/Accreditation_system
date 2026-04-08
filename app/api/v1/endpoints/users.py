@@ -20,7 +20,7 @@ allow_read_users = RoleChecker(["admin", "loc_admin", "org_admin", "officer"])
 def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
     return UserService(db)
 
-@router.get("/", response_model=UserListResponse)
+@router.get("/", response_model=UserListResponse, summary="List Users (Paginated)")
 async def get_users(
     current_user: Annotated[User, Depends(allow_read_users)],
     db: AsyncSession = Depends(get_db),
@@ -29,7 +29,11 @@ async def get_users(
     search: str | None = Query(None, description="Search by name or email")
 ):
     """
-    Fetch a paginated list of all users. Required for the Admin Dashboard User Management table.
+    Fetch a paginated list of all users.
+    
+    **Frontend Implementation Notes:**
+    - Used for the Admin Dashboard User Management table.
+    - Org Admins will only see users belonging to their own organization. Super Admins see everyone.
     """
     skip = (page - 1) * limit
     
@@ -61,7 +65,7 @@ async def get_users(
     
     return {"total": total, "items": users}
 
-@router.patch("/{user_id}/role", response_model=UserRead)
+@router.patch("/{user_id}/role", response_model=UserRead, summary="Change User Role")
 async def update_user_role(
     user_id: uuid.UUID,
     current_user: Annotated[User, Depends(allow_admin)],
@@ -69,6 +73,12 @@ async def update_user_role(
     role: UserRole = Form(...),
     organization_id: str | None = Form(None)
 ):
+    """
+    Elevate or downgrade a user's privileges.
+    
+    **Frontend Implementation Notes:**
+    - If assigning `org_admin`, you **must** also pass an `organization_id` in the form data.
+    """
     # Safely handle empty strings from HTML forms
     org_uuid = None
     if organization_id and organization_id.strip():
@@ -86,7 +96,7 @@ async def update_user_role(
             
     return await service.update_user_role(user_id, role, org_uuid)
 
-@router.patch("/{user_id}/status", response_model=UserRead)
+@router.patch("/{user_id}/status", response_model=UserRead, summary="Toggle Account Status")
 async def update_user_status(
     user_id: uuid.UUID,
     current_user: Annotated[User, Depends(allow_admin)],
@@ -94,12 +104,16 @@ async def update_user_status(
     redis: Redis = Depends(get_redis),
     is_active: bool = Form(...)
 ):
+    """
+    Activates or Deactivates a user account.
+    If `is_active` is set to false, their active Redis session is instantly revoked, forcing them out of the system.
+    """
     user = await service.update_user_status(user_id, is_active)
     if not is_active:
         await redis.set(f"active_session:{user_id}", "revoked", ex=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
     return user
 
-@router.delete("/clear-database")
+@router.delete("/clear-database", summary="DANGEROUS: Wipe Test Data")
 async def clear_database(
     current_user: Annotated[User, Depends(allow_admin)],
     db: AsyncSession = Depends(get_db)

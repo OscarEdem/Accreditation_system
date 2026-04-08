@@ -25,12 +25,17 @@ allow_badge_roles = RoleChecker(["admin", "officer"])
 class BatchBadgeRequest(BaseModel):
     participant_ids: List[uuid.UUID]
 
-@router.post("/{reference_id}", status_code=201)
+@router.post("/{reference_id}", status_code=201, summary="Generate Badge (Single)")
 async def generate_badge(
     reference_id: uuid.UUID,
     current_user: Annotated[User, Depends(allow_badge_roles)],
     db: AsyncSession = Depends(get_db)
 ):
+    """
+    Generates the cryptographic signature, QR code, and assigns a Serial Number to an approved participant.
+    (Note: `reference_id` can be either the Participant ID or the original Application ID).
+    Automatically triggers an email to the user with a download link.
+    """
     # Resolve ID: Frontend might pass an Application ID instead of a Participant ID
     stmt = select(Participant).where((Participant.id == reference_id) | (Participant.application_id == reference_id))
     participant = (await db.execute(stmt)).scalars().first()
@@ -71,12 +76,16 @@ async def generate_badge(
         "qr_image_base64": f"data:image/png;base64,{qr_base64}"
     }
 
-@router.post("/batch/generate", status_code=201)
+@router.post("/batch/generate", status_code=201, summary="Generate Badges (Bulk)")
 async def generate_badges_batch(
     request: BatchBadgeRequest,
     current_user: Annotated[User, Depends(allow_badge_roles)],
     db: AsyncSession = Depends(get_db)
 ):
+    """
+    Generates badges for an array of participant/application IDs.
+    Useful when an Admin highlights multiple rows in the data table and clicks "Generate Badges".
+    """
     # Resolve all IDs (handles both Participant IDs and Application IDs)
     stmt = select(Participant.id).where(
         (Participant.id.in_(request.participant_ids)) | 
@@ -116,7 +125,7 @@ async def generate_badges_batch(
         })
     return result
 
-@router.patch("/{badge_id}/status", response_model=BadgeRead, status_code=200)
+@router.patch("/{badge_id}/status", response_model=BadgeRead, status_code=200, summary="Update Badge Status (Revoke)")
 async def update_badge_status(
     badge_id: uuid.UUID,
     update_in: BadgeUpdate,
@@ -124,18 +133,27 @@ async def update_badge_status(
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis)
 ):
+    """
+    If status is changed to `revoked`, this instantly invalidates all Redis cache keys globally for this participant,
+    locking them out of the venue immediately.
+    """
     service = BadgeService(db, redis=redis)
     try:
         return await service.update_badge_status(badge_id, update_in.status)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-@router.get("/{reference_id}/pdf", status_code=200)
+@router.get("/{reference_id}/pdf", status_code=200, summary="Download PDF Badge")
 async def download_badge_pdf(
     reference_id: uuid.UUID,
     current_user: Annotated[User, Depends(allow_badge_roles)],
     db: AsyncSession = Depends(get_db)
 ):
+    """
+    Stamps the user's data (Photo, Name, QR code, Role) onto the Illustrator PDF template and returns it as a file download.
+    
+    **Frontend Implementation:** Set headers to expect an `application/pdf` Blob, or directly navigate the browser to this URL to trigger a native file download.
+    """
     # Resolve ID to Participant ID
     stmt = select(Participant).where((Participant.id == reference_id) | (Participant.application_id == reference_id))
     participant = (await db.execute(stmt)).scalars().first()

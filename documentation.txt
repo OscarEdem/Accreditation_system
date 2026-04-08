@@ -50,10 +50,11 @@ Logic:
 Logic:
 - Admins define Tournaments, Venues, Categories (e.g., Athlete, Media), and Zones 
   (e.g., Pitch, VIP Lounge).
-- The "Access Matrix": Admins link Categories to Zones using the `ZoneAccess` table.
-  (e.g., Category "Athlete" is granted access to Zone "Locker Room").
-- When a ZoneAccess rule is updated, the system automatically invalidates the Redis 
-  scanner cache for that zone so updates take effect at the gates instantly.
+- The "Access Matrix": A unified endpoint (`/venue/{id}/access-matrix`) hydrates a 
+  frontend grid. Admins click cells to toggle access rules (`/access/toggle`), which 
+  instantly logs the action to the Audit Trail and invalidates the Redis scanner cache 
+  for that zone worldwide. This ensures updates take effect at the physical gates 
+  in milliseconds (Zero-Trust Security).
 
 ### 3.3 Application Submission & Document Uploads
 Logic:
@@ -62,6 +63,10 @@ Logic:
   directly to S3, bypassing the FastAPI server to save bandwidth.
 - Submission: An `applicant` submits their data. The backend verifies they do not 
   already have a pending application to prevent duplicates.
+- Dynamic Category Filtering: Organizations are strictly mapped to allowed categories 
+  (e.g., "Team Ghana" gets Athletes/Officials, while "LOC Staff" gets Workforce). 
+  This allowed list is served automatically via the `/me` and `/organizations` 
+  endpoints, letting the frontend UI adapt dynamically while the backend enforces it.
 - Delegation Submission: An `org_admin` is exempt from the duplicate check. They 
   can submit infinite applications on behalf of their team. The backend records 
   the `user_id` as the "Submitter" and stores the participant's name separately.
@@ -79,8 +84,8 @@ Logic:
 - Document Review: Officers can reject *specific* documents without rejecting the 
   entire application, automatically emailing the user to re-upload just that file.
 - Audit Logging: The system detects the status change and automatically creates a 
-  record in the `AuditLog` table, tracking who made the change, the old status, 
-  the new status, and the timestamp.
+  record in the `AuditLog` table, tracking application/document reviews and Zone Access 
+  matrix toggles (who made the change, the old/new status, and the timestamp).
 - Email Notification: If the status is "approved", a Celery background task is 
   dispatched to send a SendGrid email congratulating the participant.
 

@@ -27,13 +27,23 @@ def get_scan_service(
 ) -> ScanService:
     return ScanService(db, redis)
 
-@router.post("/", response_model=ScanResponse, status_code=200)
+@router.post("/", response_model=ScanResponse, status_code=200, summary="Process Physical QR Scan")
 async def scan_participant(
     request: ScanRequest,
     current_user: Annotated[User, Depends(allow_scan_roles)],
     service: ScanService = Depends(get_scan_service),
     redis: Redis = Depends(get_redis)
 ):
+    """
+    The core endpoint hit by physical mobile scanners at the venue gates.
+    
+    **Security Features Executed Instantly:**
+    - Rate-limits to prevent API spam (max 10 scans per 10s per device).
+    - Re-hashes the QR signature locally to detect cryptographic forgery.
+    - Checks Anti-passback rules.
+    - Checks if the participant's category has access to the requested `zone_id`.
+    - Logs the interaction to `ScanLog` permanently.
+    """
     # Rate Limiting: Max 10 scans per 10 seconds per scanner device
     rate_limit_key = f"rate_limit:scan:user:{current_user.id}"
     
@@ -53,18 +63,22 @@ async def scan_participant(
         direction=request.direction
     )
 
-@router.get("/participant/{participant_id}", response_model=ScanParticipantProfile, status_code=200)
+@router.get("/participant/{participant_id}", response_model=ScanParticipantProfile, status_code=200, summary="Get Scanned Profile Details")
 async def get_participant_profile(
     participant_id: uuid.UUID,
     current_user: Annotated[User, Depends(allow_scan_roles)],
     service: ScanService = Depends(get_scan_service)
 ):
+    """
+    Used by the physical scanner app. If a scan is successful, the app calls this endpoint 
+    to download the participant's photo and name to display on the guard's screen to verify identity.
+    """
     profile = await service.get_participant_profile(participant_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Participant not found")
     return profile
 
-@router.get("/logs", response_model=ScanLogListResponse, status_code=200)
+@router.get("/logs", response_model=ScanLogListResponse, status_code=200, summary="List Scan Logs (Paginated)")
 async def get_scan_logs(
     current_user: Annotated[User, Depends(allow_scan_roles)],
     service: ScanService = Depends(get_scan_service),
@@ -76,6 +90,10 @@ async def get_scan_logs(
     end_date: datetime | None = Query(None, description="Filter up to this end date (ISO 8601)"),
     access_granted: bool | None = Query(None, description="Filter by access granted status (true/false)")
 ):
+    """
+    Retrieves a historical list of all physical gate interactions. 
+    Used for the security audit dashboard to trace exactly when and where a person entered a zone.
+    """
     skip = (page - 1) * limit
     items, total = await service.get_scan_logs(
         skip=skip, 
@@ -88,14 +106,20 @@ async def get_scan_logs(
     )
     return {"total": total, "items": items}
 
-@router.websocket("/live-alerts")
+@router.websocket("/live-alerts", name="Connect to WebSocket")
 async def scan_live_alerts(
     websocket: WebSocket,
     token: str = Query(..., description="JWT access token"),
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis)
 ):
-    """WebSocket endpoint to push live 'DENIED' scan alerts to the admin dashboard."""
+    """
+    WebSocket endpoint to push live 'DENIED' scan alerts to the admin dashboard.
+    
+    **Frontend Implementation Notes:**
+    - Connect via `wss://<domain>/api/v1/scan/live-alerts?token=<your_jwt_token>`
+    - The backend will push a JSON string whenever a malicious or unauthorized scan occurs at any gate.
+    """
     # 1. Authenticate the WebSocket connection using the query parameter token
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
