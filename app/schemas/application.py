@@ -35,6 +35,7 @@ class ApplicationCategory(str, Enum):
     category_s = "Service Providers"
 
 class ApplicationBase(BaseModel):
+    tournament_id: uuid.UUID
     user_id: uuid.UUID | None = None  # Will be auto-filled by the backend as "Submitted By"
     first_name: str
     last_name: str
@@ -53,14 +54,12 @@ class ApplicationCreate(ApplicationBase):
 class ApplicationReview(BaseModel):
     status: ApplicationStatus
     reviewer_comments: Optional[str] = None
-    tournament_id: Optional[uuid.UUID] = None
     assigned_role: Optional[str] = None
 
 class ApplicationBatchReview(BaseModel):
     application_ids: List[uuid.UUID]
     status: ApplicationStatus
     reviewer_comments: Optional[str] = None
-    tournament_id: Optional[uuid.UUID] = None
     assigned_role: Optional[str] = None
 
 class ApplicationRead(ApplicationBase):

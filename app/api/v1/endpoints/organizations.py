@@ -1,6 +1,6 @@
 import uuid
 from typing import List, Annotated
-from fastapi import APIRouter, Depends, Query, Form, status, Response
+from fastapi import APIRouter, Depends, Query, Form, status, Response, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.schemas.organization import OrganizationCreate, OrganizationRead, OrganizationListResponse, OrganizationUpdate

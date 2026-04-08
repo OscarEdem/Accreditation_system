@@ -9,6 +9,7 @@ class Application(BaseModel):
     __tablename__ = "applications"
     
     user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    tournament_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tournaments.id"))
     
     # The actual participant's personal details
     first_name: Mapped[str] = mapped_column(String)

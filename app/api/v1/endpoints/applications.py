@@ -2,8 +2,9 @@ import uuid
 import csv
 import io
 from typing import List, Annotated
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Query, Response, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.db.session import get_db
 from app.schemas.application import ApplicationCreate, ApplicationRead, ApplicationReview, ApplicationBatchReview, ApplicationReadWithSubmitter, ApplicationListResponse, ApplicationTrackResponse
 from app.schemas.document import DocumentReview, DocumentRead
@@ -11,6 +12,10 @@ from app.services.application import ApplicationService
 from app.api.deps import get_current_user, RoleChecker
 from app.models.user import User
 from app.workers.main import send_email_notification
+from app.models.category import Category
+from app.models.tournament import Tournament
+from app.services.organization import OrganizationService
+from app.core.constants import ORG_ALLOWED_CATEGORIES
 
 router = APIRouter()
 
@@ -22,9 +27,27 @@ def get_application_service(db: AsyncSession = Depends(get_db)) -> ApplicationSe
 @router.post("/public", response_model=ApplicationRead, status_code=201)
 async def submit_public_application(
     application_in: ApplicationCreate,
-    service: ApplicationService = Depends(get_application_service)
+    service: ApplicationService = Depends(get_application_service),
+    db: AsyncSession = Depends(get_db)
 ):
     """Public endpoint for applicants to submit their application without signing up or logging in."""
+    category_exists = await db.scalar(select(Category).where(Category.name == application_in.category))
+    if not category_exists:
+        raise HTTPException(status_code=400, detail=f"Category '{application_in.category}' does not exist in the system.")
+
+    tournament_exists = await db.scalar(select(Tournament).where(Tournament.id == application_in.tournament_id))
+    if not tournament_exists:
+        raise HTTPException(status_code=400, detail="Invalid tournament_id. Tournament does not exist.")
+
+    if getattr(application_in, "organization_id", None):
+        org_service = OrganizationService(db)
+        org = await org_service.get_organization_by_id(application_in.organization_id)
+        if not org:
+            raise HTTPException(status_code=400, detail="Invalid organization_id. Organization does not exist.")
+        if org.name in ORG_ALLOWED_CATEGORIES:
+            if application_in.category not in ORG_ALLOWED_CATEGORIES[org.name]:
+                raise HTTPException(status_code=400, detail=f"Category '{application_in.category}' is not allowed for organization '{org.name}'.")
+
     application_in.user_id = None
     application = await service.create_application(application_in, bypass_duplicate_check=False)
     
@@ -40,11 +63,40 @@ async def submit_public_application(
 async def create_applications_batch(
     applications_in: List[ApplicationCreate],
     current_user: Annotated[User, Depends(get_current_user)],
-    service: ApplicationService = Depends(get_application_service)
+    service: ApplicationService = Depends(get_application_service),
+    db: AsyncSession = Depends(get_db)
 ):
     """Endpoint for privileged users (like Org Admins) to submit multiple applications at once."""
     if current_user.role not in ["admin", "loc_admin", "officer", "org_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized to submit batch applications.")
+
+    # Fetch all valid category names at once to prevent N+1 DB queries in the loop
+    valid_categories = set((await db.scalars(select(Category.name))).all())
+    valid_tournaments = set((await db.scalars(select(Tournament.id))).all())
+
+    org_service = OrganizationService(db)
+    org_cache = {}
+    for app_in in applications_in:
+        # Force the application to belong to the user's organization if they are an org_admin
+        if current_user.role == "org_admin":
+            app_in.organization_id = current_user.organization_id
+
+        if app_in.category not in valid_categories:
+            raise HTTPException(status_code=400, detail=f"Category '{app_in.category}' does not exist in the system.")
+            
+        if app_in.tournament_id not in valid_tournaments:
+            raise HTTPException(status_code=400, detail="Invalid tournament_id. Tournament does not exist.")
+
+        if getattr(app_in, "organization_id", None):
+            if app_in.organization_id not in org_cache:
+                org_cache[app_in.organization_id] = await org_service.get_organization_by_id(app_in.organization_id)
+            org = org_cache[app_in.organization_id]
+            if not org:
+                raise HTTPException(status_code=400, detail="Invalid organization_id. Organization does not exist.")
+            if org.name in ORG_ALLOWED_CATEGORIES:
+                if app_in.category not in ORG_ALLOWED_CATEGORIES[org.name]:
+                    raise HTTPException(status_code=400, detail=f"Category '{app_in.category}' is not allowed for organization '{org.name}'.")
+
     applications = await service.create_applications_batch(applications_in, submitter_id=current_user.id)
     
     for app in applications:
@@ -60,8 +112,30 @@ async def create_applications_batch(
 async def create_application(
     application_in: ApplicationCreate,
     current_user: Annotated[User, Depends(get_current_user)],
-    service: ApplicationService = Depends(get_application_service)
+    service: ApplicationService = Depends(get_application_service),
+    db: AsyncSession = Depends(get_db)
 ):
+    # Force the application to belong to the user's organization if they are not system staff
+    if current_user.role in ["org_admin", "applicant"]:
+        application_in.organization_id = current_user.organization_id
+
+    category_exists = await db.scalar(select(Category).where(Category.name == application_in.category))
+    if not category_exists:
+        raise HTTPException(status_code=400, detail=f"Category '{application_in.category}' does not exist in the system.")
+
+    tournament_exists = await db.scalar(select(Tournament).where(Tournament.id == application_in.tournament_id))
+    if not tournament_exists:
+        raise HTTPException(status_code=400, detail="Invalid tournament_id. Tournament does not exist.")
+
+    if getattr(application_in, "organization_id", None):
+        org_service = OrganizationService(db)
+        org = await org_service.get_organization_by_id(application_in.organization_id)
+        if not org:
+            raise HTTPException(status_code=400, detail="Invalid organization_id. Organization does not exist.")
+        if org.name in ORG_ALLOWED_CATEGORIES:
+            if application_in.category not in ORG_ALLOWED_CATEGORIES[org.name]:
+                raise HTTPException(status_code=400, detail=f"Category '{application_in.category}' is not allowed for organization '{org.name}'.")
+
     is_privileged = current_user.role in ["admin", "loc_admin", "officer", "org_admin"]
     
     # Force the application to belong to the logged-in user to prevent impersonation (unless admin)
@@ -131,7 +205,15 @@ async def get_applications(
     skip = (page - 1) * limit
     
     # Resolve user filter constraint: admins see all, applicants see their own
-    user_id_filter = None if current_user.role in ["admin", "loc_admin", "officer"] else current_user.id
+    if current_user.role in ["admin", "loc_admin", "officer"]:
+        user_id_filter = None
+    elif current_user.role == "org_admin":
+        user_id_filter = None
+        if not current_user.organization_id:
+            raise HTTPException(status_code=403, detail="Org Admin account is not associated with an organization.")
+        organization_id = current_user.organization_id
+    else:
+        user_id_filter = current_user.id
     
     items, total = await service.get_applications(
         user_id=user_id_filter,

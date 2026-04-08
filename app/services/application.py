@@ -176,14 +176,11 @@ class ApplicationService:
         
         # Automatically convert the Application into a Participant upon approval
         if review_data.status.lower() == "approved" and old_status != "approved":
-            if not review_data.tournament_id:
-                raise HTTPException(status_code=400, detail="A tournament_id must be provided to approve the application and generate the participant.")
-                
             existing = await self.session.execute(select(Participant).where(Participant.application_id == application.id))
             if not existing.scalars().first():
                 new_participant = Participant(
                     application_id=application.id,
-                    tournament_id=review_data.tournament_id,
+                    tournament_id=application.tournament_id,
                     role=review_data.assigned_role or application.category,
                     organization_id=application.organization_id,
                     sporting_disciplines=application.sporting_disciplines
@@ -226,14 +223,11 @@ class ApplicationService:
             
             # Automatically convert the Application into a Participant upon approval
             if review_data.status.lower() == "approved" and old_status != "approved":
-                if not review_data.tournament_id:
-                    raise HTTPException(status_code=400, detail="A tournament_id must be provided to approve applications and generate participants.")
-                    
                 existing = await self.session.execute(select(Participant).where(Participant.application_id == application.id))
                 if not existing.scalars().first():
                     new_participant = Participant(
                         application_id=application.id,
-                        tournament_id=review_data.tournament_id,
+                        tournament_id=application.tournament_id,
                         role=review_data.assigned_role or application.category,
                         organization_id=application.organization_id,
                         sporting_disciplines=application.sporting_disciplines

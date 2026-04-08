@@ -15,13 +15,14 @@ from app.config.settings import settings
 router = APIRouter()
 
 allow_admin = RoleChecker(["admin", "loc_admin"])
+allow_read_users = RoleChecker(["admin", "loc_admin", "org_admin", "officer"])
 
 def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
     return UserService(db)
 
 @router.get("/", response_model=UserListResponse)
 async def get_users(
-    current_user: Annotated[User, Depends(allow_admin)],
+    current_user: Annotated[User, Depends(allow_read_users)],
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(20, ge=1, le=100, description="Items per page"),
@@ -34,6 +35,12 @@ async def get_users(
     
     # Base condition: Hide the root Super Admin account from the list
     base_conditions = [User.email != "admin@example.com"]
+
+    # Org Admins should only see users from their own organization
+    if current_user.role == UserRole.org_admin:
+        if not current_user.organization_id:
+            raise HTTPException(status_code=403, detail="Org Admin account is not associated with an organization.")
+        base_conditions.append(User.organization_id == current_user.organization_id)
     
     if search:
         search_term = f"%{search}%"

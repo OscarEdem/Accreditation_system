@@ -10,13 +10,15 @@ from redis.asyncio import Redis
 from app.db.session import get_db
 from app.db.redis import get_redis
 from app.schemas.token import Token
-from app.schemas.user import UserCreate, UserRead, ForgotPasswordRequest, ResetPasswordRequest, UserInvite, AcceptInviteRequest, ResendInviteRequest, UserRole
+from app.schemas.user import UserCreate, UserRead, UserMeResponse, ForgotPasswordRequest, ResetPasswordRequest, UserInvite, AcceptInviteRequest, ResendInviteRequest, UserRole
 from app.services.user import UserService
 from app.core.security import create_access_token
 from app.config.settings import settings
 from app.api.deps import get_current_user, RoleChecker
 from app.models.user import User
+from app.models.organization import Organization
 from app.workers.main import send_email_notification
+from app.core.constants import ORG_ALLOWED_CATEGORIES
 
 router = APIRouter()
 
@@ -54,9 +56,23 @@ async def login_for_access_token(
     access_token = create_access_token(data={"sub": user.email, "session_id": session_id}, expires_delta=access_token_expires)
     return Token(access_token=access_token, token_type="bearer")
 
-@router.get("/me", response_model=UserRead)
-async def read_users_me(current_user: Annotated[User, Depends(get_current_user)]):
-    return current_user
+@router.get("/me", response_model=UserMeResponse)
+async def read_users_me(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    org_name = None
+    allowed_categories = []
+    if current_user.organization_id:
+        org = await db.get(Organization, current_user.organization_id)
+        if org:
+            org_name = org.name
+            allowed_categories = ORG_ALLOWED_CATEGORIES.get(org.name, [])
+            
+    response = UserMeResponse.model_validate(current_user)
+    response.organization_name = org_name
+    response.allowed_categories = allowed_categories
+    return response
 
 @router.post("/logout")
 async def logout(
