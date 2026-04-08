@@ -33,7 +33,10 @@ class ParticipantService:
         return list(result.scalars().all()), total
 
     async def get_participant_by_id(self, participant_id: uuid.UUID) -> Participant:
-        participant = await self.session.get(Participant, participant_id)
+        stmt = select(Participant).where(
+            (Participant.id == participant_id) | (Participant.application_id == participant_id)
+        )
+        participant = (await self.session.execute(stmt)).scalars().first()
         if not participant:
             raise HTTPException(status_code=404, detail="Participant not found")
         return participant

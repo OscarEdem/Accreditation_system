@@ -25,12 +25,20 @@ allow_badge_roles = RoleChecker(["admin", "officer"])
 class BatchBadgeRequest(BaseModel):
     participant_ids: List[uuid.UUID]
 
-@router.post("/{participant_id}", status_code=201)
+@router.post("/{reference_id}", status_code=201)
 async def generate_badge(
-    participant_id: uuid.UUID,
+    reference_id: uuid.UUID,
     current_user: Annotated[User, Depends(allow_badge_roles)],
     db: AsyncSession = Depends(get_db)
 ):
+    # Resolve ID: Frontend might pass an Application ID instead of a Participant ID
+    stmt = select(Participant).where((Participant.id == reference_id) | (Participant.application_id == reference_id))
+    participant = (await db.execute(stmt)).scalars().first()
+    if not participant:
+        raise HTTPException(status_code=404, detail="Participant not found. Ensure the application is approved.")
+        
+    participant_id = participant.id
+
     service = BadgeService(db)
     
     try:
@@ -60,7 +68,7 @@ async def generate_badge(
     return {
         "badge_id": badge.id,
         "serial_number": badge.serial_number,
-        "qr_image_base64": qr_base64
+        "qr_image_base64": f"data:image/png;base64,{qr_base64}"
     }
 
 @router.post("/batch/generate", status_code=201)
@@ -69,9 +77,16 @@ async def generate_badges_batch(
     current_user: Annotated[User, Depends(allow_badge_roles)],
     db: AsyncSession = Depends(get_db)
 ):
+    # Resolve all IDs (handles both Participant IDs and Application IDs)
+    stmt = select(Participant.id).where(
+        (Participant.id.in_(request.participant_ids)) | 
+        (Participant.application_id.in_(request.participant_ids))
+    )
+    resolved_ids = list((await db.execute(stmt)).scalars().all())
+
     service = BadgeService(db)
     try:
-        badges = await service.create_badges_batch(request.participant_ids)
+        badges = await service.create_badges_batch(resolved_ids)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
         
@@ -80,7 +95,7 @@ async def generate_badges_batch(
         select(Participant.id, Application.first_name, Application.email)
         .select_from(Participant)
         .join(Application, Participant.application_id == Application.id)
-        .where(Participant.id.in_(request.participant_ids))
+        .where(Participant.id.in_(resolved_ids))
     )
     rows = (await db.execute(stmt)).all()
     for pid, first_name, email in rows:
@@ -93,10 +108,11 @@ async def generate_badges_batch(
         
     result = []
     for badge in badges:
+        raw_base64 = service.generate_qr_code(badge)
         result.append({
             "badge_id": badge.id,
             "serial_number": badge.serial_number,
-            "qr_image_base64": service.generate_qr_code(badge)
+            "qr_image_base64": f"data:image/png;base64,{raw_base64}"
         })
     return result
 
@@ -114,12 +130,20 @@ async def update_badge_status(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-@router.get("/{participant_id}/pdf", status_code=200)
+@router.get("/{reference_id}/pdf", status_code=200)
 async def download_badge_pdf(
-    participant_id: uuid.UUID,
+    reference_id: uuid.UUID,
     current_user: Annotated[User, Depends(allow_badge_roles)],
     db: AsyncSession = Depends(get_db)
 ):
+    # Resolve ID to Participant ID
+    stmt = select(Participant).where((Participant.id == reference_id) | (Participant.application_id == reference_id))
+    participant = (await db.execute(stmt)).scalars().first()
+    if not participant:
+        raise HTTPException(status_code=404, detail="Participant not found. Ensure the application is approved.")
+        
+    participant_id = participant.id
+
     service = BadgeService(db)
     
     # 1. Fetch the generated Badge
