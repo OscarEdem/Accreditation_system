@@ -116,8 +116,26 @@ async def clear_database(
     # 2. Delete all users except admins and loc_admins
     await db.execute(text("DELETE FROM users WHERE role NOT IN ('admin', 'loc_admin')"))
     
-    # 3. Delete all organizations now that users are cleared
-    await db.execute(text("DELETE FROM organizations"))
+    # 3. Delete all organizations except the officially seeded ones
+    SEEDED_ORGS = [
+        "Team Algeria", "Team Angola", "Team Benin", "Team Botswana", "Team Burkina Faso",
+        "Team Burundi", "Team Cabo Verde", "Team Cameroon", "Team Central African Republic",
+        "Team Chad", "Team Comoros", "Team Congo", "Team Congo (DRC)", "Team Côte d'Ivoire",
+        "Team Djibouti", "Team Egypt", "Team Equatorial Guinea", "Team Eritrea", "Team Eswatini",
+        "Team Ethiopia", "Team Gabon", "Team Gambia", "Team Ghana", "Team Guinea",
+        "Team Guinea-Bissau", "Team Kenya", "Team Lesotho", "Team Liberia", "Team Libya",
+        "Team Madagascar", "Team Malawi", "Team Mali", "Team Mauritania", "Team Mauritius",
+        "Team Morocco", "Team Mozambique", "Team Namibia", "Team Niger", "Team Nigeria",
+        "Team Rwanda", "Team São Tomé and Príncipe", "Team Senegal", "Team Seychelles",
+        "Team Sierra Leone", "Team Somalia", "Team South Africa", "Team South Sudan",
+        "Team Sudan", "Team Tanzania", "Team Togo", "Team Tunisia", "Team Uganda",
+        "Team Zambia", "Team Zimbabwe", "LOC Staff", "Media", "Technical Official",
+        "Ghana Athletics Association", "Volunteer", "Service Staff", "VIP/Guest",
+        "Confederation of African Athletics", "World Athletics"
+    ]
+    escaped_orgs = [name.replace("'", "''") for name in SEEDED_ORGS]
+    org_names_sql = ", ".join([f"'{name}'" for name in escaped_orgs])
+    await db.execute(text(f"DELETE FROM organizations WHERE name NOT IN ({org_names_sql})"))
     await db.commit()
     
     return {"message": "Database wiped successfully. Only admin users remain."}

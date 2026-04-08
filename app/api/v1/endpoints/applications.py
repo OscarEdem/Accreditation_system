@@ -26,7 +26,15 @@ async def submit_public_application(
 ):
     """Public endpoint for applicants to submit their application without signing up or logging in."""
     application_in.user_id = None
-    return await service.create_application(application_in, bypass_duplicate_check=False)
+    application = await service.create_application(application_in, bypass_duplicate_check=False)
+    
+    send_email_notification.delay(
+        recipient_email=application.email,
+        subject="ACCRA 2026 Application Received",
+        body=f"Hello {application.first_name},\n\nYour accreditation application for the ACCRA 2026 tournament has been successfully received and is currently under review.\n\nYou will receive another email once a decision has been made."
+    )
+    
+    return application
 
 @router.post("/batch", response_model=List[ApplicationRead], status_code=201)
 async def create_applications_batch(
@@ -37,7 +45,16 @@ async def create_applications_batch(
     """Endpoint for privileged users (like Org Admins) to submit multiple applications at once."""
     if current_user.role not in ["admin", "loc_admin", "officer", "org_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized to submit batch applications.")
-    return await service.create_applications_batch(applications_in, submitter_id=current_user.id)
+    applications = await service.create_applications_batch(applications_in, submitter_id=current_user.id)
+    
+    for app in applications:
+        send_email_notification.delay(
+            recipient_email=app.email,
+            subject="ACCRA 2026 Application Received",
+            body=f"Hello {app.first_name},\n\nAn accreditation application for the ACCRA 2026 tournament has been submitted on your behalf by your organization.\n\nYou will receive another email once a decision has been made."
+        )
+        
+    return applications
 
 @router.post("/", response_model=ApplicationRead, status_code=201)
 async def create_application(
@@ -53,7 +70,15 @@ async def create_application(
     else:
         application_in.user_id = application_in.user_id or current_user.id
         
-    return await service.create_application(application_in, bypass_duplicate_check=is_privileged)
+    application = await service.create_application(application_in, bypass_duplicate_check=is_privileged)
+    
+    send_email_notification.delay(
+        recipient_email=application.email,
+        subject="ACCRA 2026 Application Received",
+        body=f"Hello {application.first_name},\n\nYour accreditation application for the ACCRA 2026 tournament has been successfully received and is currently under review.\n\nYou will receive another email once a decision has been made."
+    )
+    
+    return application
 
 @router.get("/export", response_class=Response)
 async def export_applications_csv(
