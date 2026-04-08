@@ -19,3 +19,15 @@ class ZoneRead(ZoneBase):
 
 class ZoneAccessCreate(BaseModel):
     category_id: uuid.UUID
+
+class ZoneMatrixItem(BaseModel):
+    zone_id: uuid.UUID
+    category_id: uuid.UUID
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class ZoneAccessToggleResponse(BaseModel):
+    granted: bool
+    message: str
+    zone_id: uuid.UUID
+    category_id: uuid.UUID

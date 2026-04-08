@@ -2,13 +2,17 @@ import uuid
 from typing import List, Annotated
 from fastapi import APIRouter, Depends, Form
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from redis.asyncio import Redis
 from app.db.session import get_db
 from app.db.redis import get_redis
-from app.schemas.zone import ZoneCreate, ZoneRead, ZoneAccessCreate
+from app.schemas.zone import ZoneCreate, ZoneRead, ZoneAccessCreate, ZoneMatrixItem, ZoneAccessToggleResponse
 from app.services.zone import ZoneService
 from app.api.deps import get_current_user, RoleChecker
 from app.models.user import User
+from app.models.zone import Zone
+from app.models.zone_access import ZoneAccess
+from app.models.audit_log import AuditLog
 
 router = APIRouter()
 
@@ -62,3 +66,74 @@ async def get_zone_capacity(
     service: ZoneService = Depends(get_zone_service)
 ):
     return await service.get_zone_capacity(zone_id)
+
+@router.get("/venue/{venue_id}/access-matrix", response_model=list[ZoneMatrixItem])
+async def get_venue_access_matrix(
+    venue_id: uuid.UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Fetches all active access rules for a specific venue to hydrate the Matrix checkboxes.
+    """
+    stmt = (
+        select(ZoneAccess)
+        .join(Zone, ZoneAccess.zone_id == Zone.id)
+        .where(Zone.venue_id == venue_id)
+    )
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+@router.post("/{zone_id}/access/toggle", response_model=ZoneAccessToggleResponse)
+async def toggle_zone_access(
+    zone_id: uuid.UUID,
+    request: ZoneAccessCreate,
+    current_user: Annotated[User, Depends(allow_admin)],
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis)
+):
+    """
+    Toggles access for a category to a zone. 
+    If access exists, it removes it. If not, it grants it.
+    """
+    stmt = select(ZoneAccess).where(
+        ZoneAccess.zone_id == zone_id,
+        ZoneAccess.category_id == request.category_id
+    )
+    access = (await db.execute(stmt)).scalars().first()
+    
+    if access:
+        await db.delete(access)
+        granted = False
+        message = "Access revoked."
+        action_type = "revoke_zone_access"
+    else:
+        new_access = ZoneAccess(zone_id=zone_id, category_id=request.category_id)
+        db.add(new_access)
+        granted = True
+        message = "Access granted."
+        action_type = "grant_zone_access"
+        
+    # Security Audit Trail
+    audit = AuditLog(
+        entity_type="zone_access",
+        entity_id=zone_id,
+        action=action_type,
+        new_value=f"Category ID: {request.category_id}",
+        user_id=current_user.id
+    )
+    db.add(audit)
+        
+    await db.commit()
+    
+    # 🔒 ZERO-TRUST SECURITY: Instantly invalidate the scanner cache for this zone worldwide
+    # This forces the physical scanners to re-query the database on the very next scan!
+    async for key in redis.scan_iter(f"auth:*:{zone_id}"):
+        await redis.delete(key)
+        
+    return {
+        "granted": granted, 
+        "message": message, 
+        "zone_id": zone_id, 
+        "category_id": request.category_id
+    }
