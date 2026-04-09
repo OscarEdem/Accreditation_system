@@ -45,6 +45,9 @@ Logic:
   Redis. Subsequent API requests verify this session. Admins can toggle a user's 
   `is_active` status or hit `/force-logout`, instantly deleting the Redis key and 
   forcefully terminating the user's active session worldwide.
+- Global Middleware Security: Every protected API request automatically verifies 
+  the Redis active session to prevent hijacked JWTs and extracts tenant context 
+  for structural IDOR prevention at the ORM layer.
 
 ### 3.2 Tournament & Venue Configuration
 Logic:
@@ -52,9 +55,9 @@ Logic:
   (e.g., Pitch, VIP Lounge).
 - The "Access Matrix": A unified endpoint (`/venue/{id}/access-matrix`) hydrates a 
   frontend grid. Admins click cells to toggle access rules (`/access/toggle`), which 
-  instantly logs the action to the Audit Trail and invalidates the Redis scanner cache 
-  for that zone worldwide. This ensures updates take effect at the physical gates 
-  in milliseconds (Zero-Trust Security).
+  instantly logs the action to the Audit Trail and increments the Redis cache version 
+  for that zone. This O(1) invalidation ensures updates take effect at the physical 
+  gates in milliseconds without causing database stampedes.
 
 ### 3.3 Application Submission & Document Uploads
 Logic:
@@ -111,9 +114,9 @@ Logic:
   3. Auto-Clearing: A zero-overhead "lazy evaluation" timer automatically wipes the 
      photo cache if 24 hours have passed since the last clear, preventing memory leaks 
      without requiring a dedicated background Celery worker.
-- Badge Revocation: Admins can change a badge status to "revoked". This instantly 
-  triggers a wildcard Redis delete (`scan:{participant_id}:*`) to wipe their access 
-  from all venue gates worldwide in milliseconds.
+- Badge Revocation: Admins can change a badge status to "revoked". This instantly
+  increments their Redis participant version, wiping their access from all venue 
+  gates worldwide in O(1) time without blocking operations.
 
 ### 3.6 Scanner System & Access Control
 Logic:
@@ -125,8 +128,8 @@ checks occur in under 300ms:
   Step 2. Cryptographic Check (Zero-Trust): The server re-calculates the HMAC-SHA256 
           signature using the scanned ID and Serial. If it doesn't match the scanned 
           signature, the badge is a forgery. Access is instantly DENIED.
-  Step 3. Anti-Passback (State Check): The server checks the `location` cache. If a user 
-          tries to scan 'IN' while already 'IN', they receive an Anti-Passback DENIED error.
+  Step 3. Anti-Passback (Atomic Check): The server executes a Redis Lua script to 
+          securely flip the user's `location` state, preventing duplicate entry race conditions.
   Step 4. Redis Auth Cache Check: The server checks `auth:{participant_id}:{zone_id}`. 
           If found, it returns the cached GRANTED/DENIED authorization instantly.
   Step 5. Database Fallback (Cache Miss): The server queries PostgreSQL. It checks if:

@@ -50,12 +50,9 @@ class ZoneService:
         self.session.add(ZoneAccess(zone_id=zone_id, category_id=category_id))
         await self.session.commit()
         
-        # Invalidate scanner cache for this zone so newly allowed participants can enter immediately
+        # O(1) Cache Invalidation
         if self.redis:
-            cache_pattern = f"auth:*:{zone_id}"
-            keys = await self.redis.keys(cache_pattern)
-            if keys:
-                await self.redis.delete(*keys)
+            await self.redis.incr(f"zone_version:{zone_id}")
                 
         return {"message": "Access granted successfully."}
 

@@ -117,10 +117,9 @@ async def update_zone(
     await db.commit()
     await db.refresh(zone)
     
-    # 🔒 ZERO-TRUST: Clear scanner cache if security rules changed
+    # 🔒 ZERO-TRUST: O(1) Cache Invalidation via Version Bumping
     if needs_cache_clear:
-        async for key in redis.scan_iter(f"auth:*:{zone_id}"):
-            await redis.delete(key)
+        await redis.incr(f"zone_version:{zone_id}")
             
     return zone
 
@@ -139,10 +138,9 @@ async def toggle_zone_active(
     await db.commit()
     await db.refresh(zone)
     
-    # 🔒 ZERO-TRUST: If deactivated, instantly lock everyone out by clearing the auth cache
+    # 🔒 ZERO-TRUST: O(1) Cache Invalidation
     if not zone.is_active:
-        async for key in redis.scan_iter(f"auth:*:{zone_id}"):
-            await redis.delete(key)
+        await redis.incr(f"zone_version:{zone_id}")
             
     return zone
 
@@ -162,9 +160,8 @@ async def delete_zone(
     await db.delete(zone)
     await db.commit()
     
-    # 🔒 ZERO-TRUST: Instantly invalidate scanner cache for the deleted zone
-    async for key in redis.scan_iter(f"auth:*:{zone_id}"):
-        await redis.delete(key)
+    # 🔒 ZERO-TRUST: O(1) Cache Invalidation
+    await redis.incr(f"zone_version:{zone_id}")
 
 @router.post("/{zone_id}/access", status_code=201)
 async def grant_zone_access(
@@ -259,10 +256,8 @@ async def toggle_zone_access(
         
     await db.commit()
     
-    # 🔒 ZERO-TRUST SECURITY: Instantly invalidate the scanner cache for this zone worldwide
-    # This forces the physical scanners to re-query the database on the very next scan!
-    async for key in redis.scan_iter(f"auth:*:{zone_id}"):
-        await redis.delete(key)
+    # 🔒 ZERO-TRUST SECURITY: O(1) Cache Invalidation
+    await redis.incr(f"zone_version:{zone_id}")
         
     return {
         "granted": granted, 

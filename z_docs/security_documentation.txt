@@ -1,0 +1,121 @@
+===============================================================================
+ACCRA 2026 ACCREDITATION MANAGEMENT SYSTEM (AMS)
+COMPREHENSIVE SECURITY & ZERO-TRUST ARCHITECTURE
+===============================================================================
+
+This document details the security measures, data protection protocols, and 
+physical access controls implemented across the Accreditation Management System.
+
+1. AUTHENTICATION & SESSION SECURITY
+-------------------------------------------------------------------------------
+- Hybrid JWT / Stateful Sessions: The system issues stateless JSON Web Tokens 
+  (JWTs) with short lifespans (30 minutes). Simultaneously, a `session_id` is 
+  tracked in Redis. This allows administrators to instantly terminate a user's 
+  access globally via the `/force-logout` or `is_active` toggle endpoints, 
+  combining the speed of JWTs with the security of stateful sessions.
+  
+- Brute Force & Credential Stuffing Protection: Redis strictly rate-limits 
+  authentication endpoints.
+  * `/login`: Max 5 failed attempts per 5 minutes per email.
+  * `/forgot-password`: Max 3 requests per 60 seconds.
+  * `/resend-invite`: Max 3 requests per 60 seconds.
+
+- Global Session Middleware: Every protected endpoint is verified globally 
+  via FastAPI middleware. It strictly checks that the JWT matches the active 
+  Redis session, preventing unauthorized access even if a developer omits 
+  an endpoint dependency.
+
+- Cryptographic Token Blacklisting: Password reset and account invitation links 
+  are strictly single-use. Once a token is successfully consumed, it is placed 
+  on a Redis blacklist until its natural expiration, preventing replay attacks.
+
+- Enforced Password Complexity: Pydantic validators enforce strong passwords 
+  globally (minimum 12 characters, encouraging passphrases over complexity) 
+  on registration, invites, and password resets.
+
+2. AUTHORIZATION & DATA PRIVACY
+-------------------------------------------------------------------------------
+- Strict Role-Based Access Control (RBAC): All endpoints are protected by a 
+  FastAPI `RoleChecker` dependency. System actions are restricted across six 
+  distinct roles: applicant, org_admin, scanner, officer, loc_admin, and admin.
+
+- IDOR (Insecure Direct Object Reference) Protection: Endpoints handling 
+  Personally Identifiable Information (PII) enforce strict ownership boundaries 
+  at the ORM layer using `ContextVar` and SQLAlchemy `with_loader_criteria`.
+  This natively scopes all database queries to the requesting tenant:
+  * Applicants can only query their own applications, participant data, and badges.
+  * Org Admins can only query data belonging to their specific organization's team.
+
+- Automated GDPR Data Scrubbing: A Celery Beat background worker runs daily at 
+  Midnight UTC. It identifies tournaments that ended over 30 days ago and:
+  1. Permanently deletes passport and profile images from AWS S3.
+  2. Overwrites PostgreSQL PII (Names, Emails, DOBs, Gender) with "REDACTED".
+
+3. PHYSICAL VENUE SECURITY (ZERO-TRUST)
+-------------------------------------------------------------------------------
+- Cryptographic QR Forgery Protection: Badges are signed using an HMAC-SHA256 
+  hash combining the `participant_id`, `serial_number`, and the server's private 
+  `SECRET_KEY`. If a user attempts to forge or modify a QR code, the scanning 
+  engine rejects it instantly without querying the database.
+
+- Anti-Passback Enforcement: The system tracks if a user is physically "IN" or 
+  "OUT" of a specific zone using Atomic Redis Lua scripts. This eliminates 
+  race conditions and actively prevents multiple individuals from entering simultaneously.
+
+- O(1) Cache Invalidation (Versioned Keys): 
+  If an Admin revokes a participant's badge, or temporarily closes a Zone, the 
+  backend instantly increments a Redis version integer (e.g. `zone_version:123`). 
+  This seamlessly invalidates the cache globally without creating stampedes or 
+  blocking the Redis thread with expensive `SCAN` operations.
+
+- Live Security Alerts: If a scan results in "DENIED" (due to forgery, revoked 
+  badge, or wrong zone), the backend publishes a JSON alert to a Redis Pub/Sub 
+  channel. A secure WebSocket pushes this alert directly to the Admin Dashboard 
+  in real-time.
+
+4. INFRASTRUCTURE & NETWORK DEFENSES
+-------------------------------------------------------------------------------
+- VPC Network Isolation: The system enforces strict network boundaries. The 
+  Application Load Balancer (ALB) resides in Public Subnets, while all compute 
+  (ECS Fargate) and data layers (RDS, ElastiCache Redis) are isolated in 
+  Private Subnets, making them completely inaccessible from the public internet.
+
+- AWS WAF (Web Application Firewall): An AWS Web ACL is attached to the ALB to 
+  inspect incoming traffic at the perimeter. It is optimally configured with 
+  highly targeted rules to protect the application layer:
+  * Core Rule Set: Blocks OWASP Top 10 vulnerabilities (e.g., XSS).
+  * Known Bad Inputs: Blocks vulnerability scanners and exploit attempts.
+  * Amazon IP Reputation List: Blocks IPs actively performing DDoS attacks.
+  * SQL Database & Linux OS Rules: Targeted protection for PostgreSQL and Docker.
+  * Custom Rate Limiting: Blocks any single IP exceeding 2,000 requests per 5 minutes.
+
+- 100% Header-Based Auth (CSRF Immunity): The system strictly uses `Authorization: Bearer` 
+  tokens. Because browser cookies are entirely disabled for authentication, 
+  Cross-Site Request Forgery (CSRF) is architecturally impossible by default. 
+  CORS is configured strictly as a UI defense-in-depth layer.
+
+- Bulletproof AWS S3 Uploads: Direct-to-cloud uploads are secured via strictly 
+  generated pre-signed POST URLs.
+  * Enforces maximum file sizes (2MB for photos, 5MB for documents).
+  * Enforces MIME type matching.
+  * Directory Traversal Protection: The backend completely ignores user-provided 
+    filenames, dynamically generating a safe UUID and deriving the extension 
+    strictly from the validated MIME type.
+  * Malware Scanning: AWS GuardDuty for S3 is configured to automatically scan 
+    uploaded objects for malware payloads hidden within polyglot files.
+
+- Webhook Cryptographic Verification: The SendGrid webhook endpoint (`/sendgrid`) 
+  verifies the `X-Twilio-Email-Event-Webhook-Signature` to ensure malicious 
+  actors cannot spoof email bounce/spam reports to sabotage user accounts.
+
+- Rate-Limited Gate Scanners: To prevent DDoS at the application layer, physical 
+  scanner devices are limited to 10 scans per 10 seconds.
+
+5. DATA INTEGRITY & ENFORCEMENT
+-------------------------------------------------------------------------------
+- Two-Layer Data Validation: Data is validated at the application layer using 
+  Pydantic Enums, and again at the database layer.
+- Admin Matrix Bypass: Only privileged Admins and Officers can assign arbitrary 
+  categories to organizations. Standard users and Org Admins are strictly bound 
+  to the `ORG_ALLOWED_CATEGORIES` matrix.
+===============================================================================

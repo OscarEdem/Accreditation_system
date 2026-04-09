@@ -64,30 +64,13 @@ class ScanService:
             await self._log_scan(None, zone_id, scanner_id, False, "Invalid or forged QR code signature", direction)
             return {"access": "DENIED", "reason": "Invalid or forged QR code", "role": None}
 
-        # 1. Anti-Passback Check (Are they already IN or OUT?)
-        state_key = f"location:{participant_id}:{zone_id}"
-        last_direction = await self.redis.get(state_key)
-        
-        if last_direction and isinstance(last_direction, bytes):
-            last_direction = last_direction.decode("utf-8")
-            
-        if not last_direction:
-            # Cache miss for state: check DB for last successful scan
-            last_scan_stmt = (
-                select(ScanLog.direction)
-                .where(ScanLog.participant_id == participant_id, ScanLog.zone_id == zone_id, ScanLog.access_granted == True)
-                .order_by(ScanLog.created_at.desc())
-                .limit(1)
-            )
-            last_direction = (await self.session.execute(last_scan_stmt)).scalar()
-            
-        if last_direction == direction:
-            reason = f"Anti-passback violation: Participant is already marked as {direction}"
-            await self._log_scan(participant_id, zone_id, scanner_id, False, reason, direction)
-            return {"access": "DENIED", "reason": reason, "role": None}
+        # 1. Authorization Check (O(1) Versioned Cache)
+        z_version = await self.redis.get(f"zone_version:{zone_id}") or b"0"
+        p_version = await self.redis.get(f"participant_version:{participant_id}") or b"0"
+        if isinstance(z_version, bytes): z_version = z_version.decode("utf-8")
+        if isinstance(p_version, bytes): p_version = p_version.decode("utf-8")
 
-        # 2. Authorization Check (Use Cache)
-        auth_cache_key = f"auth:{participant_id}:{zone_id}"
+        auth_cache_key = f"auth:{participant_id}:v{p_version}:{zone_id}:v{z_version}"
         cached_auth = await self.redis.get(auth_cache_key)
         
         if cached_auth:
@@ -132,16 +115,29 @@ class ScanService:
                 role = participant.role
             await self.redis.set(auth_cache_key, json.dumps({"is_granted": is_granted, "reason": reason, "role": role}), ex=300)
 
+        # 2. Anti-Passback (Atomic Check-and-Set via Lua)
+        if is_granted:
+            state_key = f"location:{participant_id}:{zone_id}"
+            lua_script = """
+            local current = redis.call('GET', KEYS[1])
+            if current == ARGV[1] then
+                return 0
+            else
+                redis.call('SETEX', KEYS[1], 43200, ARGV[1])
+                return 1
+            end
+            """
+            success = await self.redis.eval(lua_script, 1, state_key, direction)
+            if not success:
+                is_granted = False
+                reason = f"Anti-passback violation: Participant is already marked as {direction}"
+                role = None
+
         response = {
             "access": "GRANTED" if is_granted else "DENIED",
             "reason": reason,
             "role": role
         }
-        
-        # 3. Finalize & Log
-        if is_granted:
-            # Update physical location state (expires in 12 hours to auto-reset next day)
-            await self.redis.set(state_key, direction, ex=43200)
         
         await self._log_scan(participant_id, zone_id, scanner_id, is_granted, reason, direction)
 

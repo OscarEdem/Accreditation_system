@@ -139,7 +139,11 @@ async def update_badge_status(
     """
     service = BadgeService(db, redis=redis)
     try:
-        return await service.update_badge_status(badge_id, update_in.status)
+        badge = await service.update_badge_status(badge_id, update_in.status)
+        # 🔒 ZERO-TRUST: O(1) participant cache invalidation
+        if update_in.status.lower() == "revoked":
+            await redis.incr(f"participant_version:{badge.participant_id}")
+        return badge
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

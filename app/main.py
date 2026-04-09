@@ -5,11 +5,14 @@ from contextlib import asynccontextmanager
 import asyncio
 from datetime import datetime, timezone
 from fastapi import FastAPI
-from fastapi import Depends
+from fastapi import Depends, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
 from redis.asyncio import Redis
+import jwt
+from app.core.tenant import tenant_user_id, tenant_role, tenant_org_id
 from app.api.v1.router import api_router
 from app.config.settings import settings
 from app.workers.main import send_email_notification
@@ -82,6 +85,15 @@ async def run_startup_checks():
 async def lifespan(app: FastAPI):
     logger.info("Starting up Accreditation Management System API...")
     
+    # Initialize Redis globally for the middleware
+    redis_kwargs = {
+        "socket_connect_timeout": 5,
+        "socket_timeout": 5
+    }
+    if settings.REDIS_URL.startswith("rediss://"):
+        redis_kwargs["ssl_cert_reqs"] = "none"
+    app.state.redis = Redis.from_url(settings.REDIS_URL, **redis_kwargs)
+
     # Fire-and-forget: dispatch the checks to the background!
     # Uvicorn will NOT wait for this to finish before answering health checks.
     asyncio.create_task(run_startup_checks())
@@ -90,6 +102,7 @@ async def lifespan(app: FastAPI):
     
     yield
     
+    await app.state.redis.aclose()
     logger.info("Shutting down Accreditation Management System API...")
 
 app = FastAPI(
@@ -113,6 +126,61 @@ app.add_middleware(
     allow_methods=["*"],  # Allows GET, POST, PUT, DELETE, etc.
     allow_headers=["*"],  # Allows Authorization (JWT) and Content-Type headers
 )
+
+PUBLIC_PATHS = [
+    "/docs", "/openapi.json", "/health", "/", 
+    "/api/v1/auth/login", "/api/v1/auth/register",
+    "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password",
+    "/api/v1/auth/accept-invite", "/api/v1/auth/resend-invite",
+    "/api/v1/applications/public", "/api/v1/applications/track/status",
+    "/api/v1/webhooks/sendgrid"
+]
+
+@app.middleware("http")
+async def global_security_middleware(request: Request, call_next):
+    """
+    Global middleware that enforces the Redis session invariant on EVERY request.
+    This guarantees that a developer forgetting `Depends(get_current_user)` 
+    will not accidentally expose an endpoint.
+    """
+    if request.method == "OPTIONS":
+        return await call_next(request)
+        
+    path = request.url.path
+    
+    # 1. Bypass auth for strictly public paths
+    if any(path.startswith(p) for p in PUBLIC_PATHS) or path.startswith("/api/v1/scan/live-alerts"):
+        return await call_next(request)
+        
+    # 2. Extract and Verify Token
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return JSONResponse(status_code=401, content={"detail": "Missing or invalid authentication token"})
+        
+    token = auth_header.split(" ")[1]
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id = payload.get("user_id")
+        session_id = payload.get("session_id")
+        
+        # 3. Global Redis Session Enforcement (Centralized Revocation)
+        redis_client: Redis = request.app.state.redis
+        active_session = await redis_client.get(f"active_session:{user_id}")
+        
+        if not active_session or active_session.decode("utf-8") != session_id:
+            return JSONResponse(status_code=401, content={"detail": "Session expired, revoked, or invalid."})
+            
+        # 4. Set Global Tenant Context for SQLAlchemy Scoping
+        tenant_user_id.set(user_id)
+        tenant_role.set(payload.get("role"))
+        tenant_org_id.set(payload.get("org_id"))
+        
+    except jwt.ExpiredSignatureError:
+        return JSONResponse(status_code=401, content={"detail": "Token has expired"})
+    except jwt.InvalidTokenError:
+        return JSONResponse(status_code=401, content={"detail": "Invalid token"})
+        
+    return await call_next(request)
 
 # --- Router Registration ---
 app.include_router(api_router, prefix="/api/v1")

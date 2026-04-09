@@ -16,11 +16,14 @@ Technology Stack
 
 Infrastructure Topology (AWS-native approach)
 Based on the provided architecture sketch, the system is designed to be deployed in a containerized, highly available environment:
-1. Client Requests (Internet) reach the system and are distributed by an Application Load Balancer (ALB).
-2. The ALB routes traffic to ECS Fargate, running stateless FastAPI Docker containers.
-   * Background jobs are executed by a parallel ECS Fargate Celery worker cluster.
-3. The FastAPI containers interact with:
-   * RDS (PostgreSQL): For persistent relational data (Users, Applications, Tournaments, etc.).
-   * Redis: For transient data, live WebSockets, rate limits, and Celery task queues.
-   * S3: For direct secure storage and retrieval of application photos/media.
+1. Network Isolation (VPC): The system uses a standard VPC architecture with Public and Private Subnets.
+2. Perimeter Defense: Client Requests (Internet) are first inspected by AWS WAF (Web Application Firewall) to block SQLi, XSS, and DDoS floods.
+3. Load Balancing: Cleared traffic reaches the Application Load Balancer (ALB) located in the Public Subnets.
+4. Compute: The ALB routes traffic to ECS Fargate containers (FastAPI) located securely in the Private Subnets.
+   * Background jobs are executed by a parallel ECS Fargate Celery worker cluster, also in Private Subnets.
+   * Outbound internet access (for SendGrid) is routed through a NAT Gateway.
+5. Data Layer: The FastAPI and Celery containers interact with:
+   * RDS (PostgreSQL): Located in Private Subnets for persistent relational data.
+   * Redis: Located in Private Subnets for transient data, live WebSockets, and Celery queues.
+   * S3: For direct secure storage and retrieval of application photos/media (via VPC Gateway Endpoint or NAT).
    * SendGrid API: For dispatching transactional HTML emails.

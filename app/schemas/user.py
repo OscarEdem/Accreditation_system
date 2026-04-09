@@ -27,8 +27,8 @@ class UserCreate(UserBase):
     @field_validator('password')
     @classmethod
     def validate_password(cls, v: str, info: ValidationInfo) -> str:
-        if len(v) < 8 or not re.search(r"[A-Z]", v) or not re.search(r"\d", v):
-            raise ValueError("Password must be at least 8 characters long, contain an uppercase letter, and a number.")
+        if len(v) < 12:
+            raise ValueError("Password must be at least 12 characters long. We recommend using a passphrase.")
         return v
 
 class UserRead(UserBase):
@@ -62,8 +62,8 @@ class ResetPasswordRequest(BaseModel):
     @field_validator('new_password')
     @classmethod
     def validate_password(cls, v: str, info: ValidationInfo) -> str:
-        if len(v) < 8 or not re.search(r"[A-Z]", v) or not re.search(r"\d", v):
-            raise ValueError("Password must be at least 8 characters long, contain an uppercase letter, and a number.")
+        if len(v) < 12:
+            raise ValueError("Password must be at least 12 characters long. We recommend using a passphrase.")
         return v
 
 class UserInvite(BaseModel):
@@ -80,8 +80,8 @@ class AcceptInviteRequest(BaseModel):
     @field_validator('new_password')
     @classmethod
     def validate_password(cls, v: str, info: ValidationInfo) -> str:
-        if len(v) < 8 or not re.search(r"[A-Z]", v) or not re.search(r"\d", v):
-            raise ValueError("Password must be at least 8 characters long, contain an uppercase letter, and a number.")
+        if len(v) < 12:
+            raise ValueError("Password must be at least 12 characters long. We recommend using a passphrase.")
         return v
 
 class ResendInviteRequest(BaseModel):

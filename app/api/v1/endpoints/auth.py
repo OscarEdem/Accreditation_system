@@ -84,7 +84,16 @@ async def login_for_access_token(
     await redis.set(f"active_session:{user.id}", session_id, ex=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
     
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(data={"sub": user.email, "session_id": session_id}, expires_delta=access_token_expires)
+    access_token = create_access_token(
+        data={
+            "sub": user.email, 
+            "session_id": session_id,
+            "user_id": str(user.id),
+            "role": user.role.value,
+            "org_id": str(user.organization_id) if user.organization_id else None
+        }, 
+        expires_delta=access_token_expires
+    )
     return Token(access_token=access_token, token_type="bearer")
 
 @router.get("/me", response_model=UserMeResponse, summary="Get Current User Profile")

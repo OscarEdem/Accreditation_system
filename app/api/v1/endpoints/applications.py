@@ -48,9 +48,9 @@ async def submit_public_application(
     }
     ```
     """
-    category_exists = await db.scalar(select(Category).where(Category.name == application_in.category))
+    category_exists = await db.scalar(select(Category).where(Category.name == application_in.category.value))
     if not category_exists:
-        raise HTTPException(status_code=400, detail=f"Category '{application_in.category}' does not exist in the system.")
+        raise HTTPException(status_code=400, detail=f"Category '{application_in.category.value}' does not exist in the system.")
 
     if not application_in.tournament_id:
         active_tourn = await db.scalar(select(Tournament).where(Tournament.is_active == True).order_by(Tournament.created_at.desc()).limit(1))
@@ -68,8 +68,8 @@ async def submit_public_application(
         if not org:
             raise HTTPException(status_code=400, detail="Invalid organization_id. Organization does not exist.")
         if org.name in ORG_ALLOWED_CATEGORIES:
-            if application_in.category not in ORG_ALLOWED_CATEGORIES[org.name]:
-                raise HTTPException(status_code=400, detail=f"Category '{application_in.category}' is not allowed for organization '{org.name}'.")
+            if application_in.category.value not in ORG_ALLOWED_CATEGORIES[org.name]:
+                raise HTTPException(status_code=400, detail=f"Category '{application_in.category.value}' is not allowed for organization '{org.name}'.")
 
     application_in.user_id = None
     application = await service.create_application(application_in, bypass_duplicate_check=False)
@@ -112,8 +112,8 @@ async def create_applications_batch(
         if current_user.role == "org_admin":
             app_in.organization_id = current_user.organization_id
 
-        if app_in.category not in valid_categories:
-            raise HTTPException(status_code=400, detail=f"Category '{app_in.category}' does not exist in the system.")
+        if app_in.category.value not in valid_categories:
+            raise HTTPException(status_code=400, detail=f"Category '{app_in.category.value}' does not exist in the system.")
             
         if not app_in.tournament_id:
             if not default_tourn:
@@ -129,8 +129,10 @@ async def create_applications_batch(
             if not org:
                 raise HTTPException(status_code=400, detail="Invalid organization_id. Organization does not exist.")
             if org.name in ORG_ALLOWED_CATEGORIES:
-                if app_in.category not in ORG_ALLOWED_CATEGORIES[org.name]:
-                    raise HTTPException(status_code=400, detail=f"Category '{app_in.category}' is not allowed for organization '{org.name}'.")
+                # Admins and Officers can bypass the category restriction
+                is_admin = current_user.role in ["admin", "loc_admin", "officer"]
+                if app_in.category.value not in ORG_ALLOWED_CATEGORIES[org.name] and not is_admin:
+                    raise HTTPException(status_code=400, detail=f"Category '{app_in.category.value}' is not allowed for organization '{org.name}'.")
 
     applications = await service.create_applications_batch(applications_in, submitter_id=current_user.id)
     
@@ -154,9 +156,9 @@ async def create_application(
     if current_user.role in ["org_admin", "applicant"]:
         application_in.organization_id = current_user.organization_id
 
-    category_exists = await db.scalar(select(Category).where(Category.name == application_in.category))
+    category_exists = await db.scalar(select(Category).where(Category.name == application_in.category.value))
     if not category_exists:
-        raise HTTPException(status_code=400, detail=f"Category '{application_in.category}' does not exist in the system.")
+        raise HTTPException(status_code=400, detail=f"Category '{application_in.category.value}' does not exist in the system.")
 
     if not application_in.tournament_id:
         active_tourn = await db.scalar(select(Tournament).where(Tournament.is_active == True).order_by(Tournament.created_at.desc()).limit(1))
@@ -174,8 +176,10 @@ async def create_application(
         if not org:
             raise HTTPException(status_code=400, detail="Invalid organization_id. Organization does not exist.")
         if org.name in ORG_ALLOWED_CATEGORIES:
-            if application_in.category not in ORG_ALLOWED_CATEGORIES[org.name]:
-                raise HTTPException(status_code=400, detail=f"Category '{application_in.category}' is not allowed for organization '{org.name}'.")
+            # Admins and Officers can bypass the category restriction
+            is_admin = current_user.role in ["admin", "loc_admin", "officer"]
+            if application_in.category.value not in ORG_ALLOWED_CATEGORIES[org.name] and not is_admin:
+                raise HTTPException(status_code=400, detail=f"Category '{application_in.category.value}' is not allowed for organization '{org.name}'.")
 
     is_privileged = current_user.role in ["admin", "loc_admin", "officer", "org_admin"]
     
