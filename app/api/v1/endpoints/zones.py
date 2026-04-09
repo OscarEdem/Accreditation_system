@@ -3,6 +3,7 @@ from typing import List, Annotated
 from fastapi import APIRouter, Depends, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from fastapi import HTTPException
 from redis.asyncio import Redis
 from app.db.session import get_db
 from app.db.redis import get_redis
@@ -12,6 +13,7 @@ from app.api.deps import get_current_user, RoleChecker
 from app.models.user import User
 from app.models.zone import Zone
 from app.models.zone_access import ZoneAccess
+from app.models.venue import Venue
 from app.models.audit_log import AuditLog
 
 router = APIRouter()
@@ -28,10 +30,17 @@ def get_zone_service(
 async def create_zone(
     current_user: Annotated[User, Depends(allow_admin)],
     service: ZoneService = Depends(get_zone_service),
+    db: AsyncSession = Depends(get_db),
     name: str = Form(...),
-    venue_id: uuid.UUID = Form(...),
+    venue_id: uuid.UUID | None = Form(None),
     description: str | None = Form(None)
 ):
+    if not venue_id:
+        default_venue = await db.scalar(select(Venue).order_by(Venue.created_at.asc()).limit(1))
+        if not default_venue:
+            raise HTTPException(status_code=400, detail="No venues exist in the system to auto-assign.")
+        venue_id = default_venue.id
+        
     zone_in = ZoneCreate(name=name, venue_id=venue_id, description=description)
     return await service.create_zone(zone_in)
 

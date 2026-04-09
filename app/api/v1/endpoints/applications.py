@@ -37,14 +37,14 @@ async def submit_public_application(
     - Used at the end of the public multi-step form wizard.
     - `category` must exactly match one of the system's allowed category strings.
     - `organization_id` must be provided if the user belongs to a specific team (e.g., Team Ghana).
+    - `tournament_id` is optional. If omitted, the system will auto-assign the active tournament.
     
     **Example JSON Payload:**
     ```json
     {
       "first_name": "John",
       "last_name": "Doe",
-      "category": "Athlete",
-      "tournament_id": "123e4567-e89b-12d3-a456-426614174000"
+      "category": "Athlete"
     }
     ```
     """
@@ -52,9 +52,15 @@ async def submit_public_application(
     if not category_exists:
         raise HTTPException(status_code=400, detail=f"Category '{application_in.category}' does not exist in the system.")
 
-    tournament_exists = await db.scalar(select(Tournament).where(Tournament.id == application_in.tournament_id))
-    if not tournament_exists:
-        raise HTTPException(status_code=400, detail="Invalid tournament_id. Tournament does not exist.")
+    if not application_in.tournament_id:
+        active_tourn = await db.scalar(select(Tournament).where(Tournament.is_active == True).order_by(Tournament.created_at.desc()).limit(1))
+        if not active_tourn:
+            raise HTTPException(status_code=400, detail="No active tournament found in the system.")
+        application_in.tournament_id = active_tourn.id
+    else:
+        tournament_exists = await db.scalar(select(Tournament).where(Tournament.id == application_in.tournament_id))
+        if not tournament_exists:
+            raise HTTPException(status_code=400, detail="Invalid tournament_id. Tournament does not exist.")
 
     if getattr(application_in, "organization_id", None):
         org_service = OrganizationService(db)
@@ -97,6 +103,8 @@ async def create_applications_batch(
     valid_categories = set((await db.scalars(select(Category.name))).all())
     valid_tournaments = set((await db.scalars(select(Tournament.id))).all())
 
+    default_tourn = await db.scalar(select(Tournament).where(Tournament.is_active == True).order_by(Tournament.created_at.desc()).limit(1))
+
     org_service = OrganizationService(db)
     org_cache = {}
     for app_in in applications_in:
@@ -107,7 +115,11 @@ async def create_applications_batch(
         if app_in.category not in valid_categories:
             raise HTTPException(status_code=400, detail=f"Category '{app_in.category}' does not exist in the system.")
             
-        if app_in.tournament_id not in valid_tournaments:
+        if not app_in.tournament_id:
+            if not default_tourn:
+                raise HTTPException(status_code=400, detail="No active tournament found in the system.")
+            app_in.tournament_id = default_tourn.id
+        elif app_in.tournament_id not in valid_tournaments:
             raise HTTPException(status_code=400, detail="Invalid tournament_id. Tournament does not exist.")
 
         if getattr(app_in, "organization_id", None):
@@ -146,9 +158,15 @@ async def create_application(
     if not category_exists:
         raise HTTPException(status_code=400, detail=f"Category '{application_in.category}' does not exist in the system.")
 
-    tournament_exists = await db.scalar(select(Tournament).where(Tournament.id == application_in.tournament_id))
-    if not tournament_exists:
-        raise HTTPException(status_code=400, detail="Invalid tournament_id. Tournament does not exist.")
+    if not application_in.tournament_id:
+        active_tourn = await db.scalar(select(Tournament).where(Tournament.is_active == True).order_by(Tournament.created_at.desc()).limit(1))
+        if not active_tourn:
+            raise HTTPException(status_code=400, detail="No active tournament found in the system.")
+        application_in.tournament_id = active_tourn.id
+    else:
+        tournament_exists = await db.scalar(select(Tournament).where(Tournament.id == application_in.tournament_id))
+        if not tournament_exists:
+            raise HTTPException(status_code=400, detail="Invalid tournament_id. Tournament does not exist.")
 
     if getattr(application_in, "organization_id", None):
         org_service = OrganizationService(db)

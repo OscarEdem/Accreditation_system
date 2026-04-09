@@ -10,6 +10,7 @@ class TournamentBase(BaseModel):
     host_city: str
     venue_id: uuid.UUID
     description: Optional[str] = None
+    is_active: bool = True
 
 class TournamentCreate(TournamentBase):
     pass
