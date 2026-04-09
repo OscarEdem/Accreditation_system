@@ -258,9 +258,9 @@ async def get_applications(
     skip = (page - 1) * limit
     
     # Resolve user filter constraint: admins see all, applicants see their own
-    if current_user.role in ["admin", "loc_admin", "officer"]:
+    if str(current_user.role) in ["admin", "loc_admin", "officer"]:
         user_id_filter = None
-    elif current_user.role == "org_admin":
+    elif str(current_user.role) == "org_admin":
         user_id_filter = None
         if not current_user.organization_id:
             raise HTTPException(status_code=403, detail="Org Admin account is not associated with an organization.")
@@ -289,9 +289,9 @@ async def get_application(
     application = await service.get_application_by_id(application_id)
     
     # SECURITY: Prevent IDOR. Enforce strict ownership boundaries.
-    if current_user.role == "applicant" and application.user_id != current_user.id:
+    if str(current_user.role) == "applicant" and application.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to view this application.")
-    if current_user.role == "org_admin" and application.organization_id != current_user.organization_id:
+    if str(current_user.role) == "org_admin" and application.organization_id != current_user.organization_id:
         raise HTTPException(status_code=403, detail="Not authorized to view this application.")
         
     return application

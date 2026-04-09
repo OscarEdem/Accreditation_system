@@ -171,9 +171,9 @@ async def download_badge_pdf(
     participant, app_user_id, app_org_id = row
     
     # SECURITY: Ensure applicants can only download their own badges, and Org Admins only their team's.
-    if current_user.role == "applicant" and app_user_id != current_user.id:
+    if str(current_user.role) == "applicant" and app_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to download this badge.")
-    if current_user.role == "org_admin" and app_org_id != current_user.organization_id:
+    if str(current_user.role) == "org_admin" and app_org_id != current_user.organization_id:
         raise HTTPException(status_code=403, detail="Not authorized to download this badge.")
         
     participant_id = participant.id

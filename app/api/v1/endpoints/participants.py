@@ -1,8 +1,8 @@
 import uuid
 from typing import List, Annotated
 from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.db.session import get_db
 from app.schemas.participant import ParticipantRead, ParticipantListResponse
 from app.services.participant import ParticipantService
@@ -33,9 +33,9 @@ async def get_participants(
     user_id_filter = None
     org_id_filter = None
     
-    if current_user.role == "applicant":
+    if str(current_user.role) == "applicant":
         user_id_filter = current_user.id
-    elif current_user.role == "org_admin":
+    elif str(current_user.role) == "org_admin":
         if not current_user.organization_id:
             raise HTTPException(status_code=403, detail="Org Admin account is not associated with an organization.")
         org_id_filter = current_user.organization_id
@@ -58,12 +58,14 @@ async def get_participant(
     db: AsyncSession = Depends(get_db)
 ):
     participant = await service.get_participant_by_id(participant_id)
-    if current_user.role == "applicant":
+    
+    # SECURITY: Prevent IDOR. Enforce strict ownership boundaries.
+    if str(current_user.role) == "applicant":
         app_user_id = await db.scalar(select(Application.user_id).where(Application.id == participant.application_id))
         if app_user_id != current_user.id:
             raise HTTPException(status_code=403, detail="Not authorized to view this participant.")
             
-    if current_user.role == "org_admin" and participant.organization_id != current_user.organization_id:
+    if str(current_user.role) == "org_admin" and participant.organization_id != current_user.organization_id:
         raise HTTPException(status_code=403, detail="Not authorized to view this participant.")
         
     return participant

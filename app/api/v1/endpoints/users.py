@@ -41,7 +41,7 @@ async def get_users(
     base_conditions = [User.email != "admin@example.com"]
 
     # Org Admins should only see users from their own organization
-    if current_user.role == UserRole.org_admin:
+    if str(current_user.role) == "org_admin":
         if not current_user.organization_id:
             raise HTTPException(status_code=403, detail="Org Admin account is not associated with an organization.")
         base_conditions.append(User.organization_id == current_user.organization_id)
