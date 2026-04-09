@@ -14,8 +14,17 @@ class ZoneService:
         self.redis = redis
 
     async def create_zone(self, zone_in: ZoneCreate) -> Zone:
-        zone = Zone(**zone_in.model_dump())
+        data = zone_in.model_dump()
+        allowed_categories = data.pop("allowed_categories", [])
+        
+        zone = Zone(**data)
         self.session.add(zone)
+        await self.session.flush()  # Generates the zone.id without committing
+        
+        # Instantly create the access rules selected in the form
+        for cat_id in allowed_categories:
+            self.session.add(ZoneAccess(zone_id=zone.id, category_id=cat_id))
+            
         await self.session.commit()
         await self.session.refresh(zone)
         return zone

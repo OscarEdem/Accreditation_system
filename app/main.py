@@ -93,7 +93,11 @@ app = FastAPI(
 # This allows your Next.js/React frontend to communicate with the API without browser security blocks.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In strict production, replace "*" with your frontend's exact domain (e.g., ["https://accra2026.com"])
+    allow_origins=[
+        "https://www.fasigms.africa",
+        "https://admin.fasigms.africa",
+        "http://localhost:3000",  # Allows your frontend developer to test locally
+    ],
     allow_credentials=True,
     allow_methods=["*"],  # Allows GET, POST, PUT, DELETE, etc.
     allow_headers=["*"],  # Allows Authorization (JWT) and Content-Type headers

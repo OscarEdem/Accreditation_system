@@ -97,28 +97,39 @@ class ScanService:
             role = auth_data["role"]
         else:
             # Cache Miss: Query DB
-            stmt = (
-                select(Participant, Application.status)
-                .join(Application, Participant.application_id == Application.id)
-                .where(Participant.id == participant_id)
-            )
-            row = (await self.session.execute(stmt)).first()
-            
-            if not row:
-                await self._log_scan(None, zone_id, scanner_id, False, "Participant not found", direction)
-                return {"access": "DENIED", "reason": "Participant not found", "role": None}
+            zone = await self.session.get(Zone, zone_id)
+            if not zone:
+                await self._log_scan(participant_id, zone_id, scanner_id, False, "Zone does not exist", direction)
+                return {"access": "DENIED", "reason": "Zone does not exist", "role": None}
                 
-            participant, application_status = row
-            is_granted = application_status.lower() == "approved"
-            reason = None if is_granted else f"Application status: {application_status}"
-            
-            if is_granted:
-                access_stmt = select(ZoneAccess).where(ZoneAccess.zone_id == zone_id, ZoneAccess.category_id == participant.category_id)
-                if not (await self.session.execute(access_stmt)).scalars().first():
-                    is_granted = False
-                    reason = "Category does not have access to this zone."
+            if not zone.is_active:
+                is_granted = False
+                reason = "Zone is currently closed."
+                role = None
+            else:
+                stmt = (
+                    select(Participant, Application.status)
+                    .join(Application, Participant.application_id == Application.id)
+                    .where(Participant.id == participant_id)
+                )
+                row = (await self.session.execute(stmt)).first()
+                
+                if not row:
+                    await self._log_scan(None, zone_id, scanner_id, False, "Participant not found", direction)
+                    return {"access": "DENIED", "reason": "Participant not found", "role": None}
                     
-            role = participant.role
+                participant, application_status = row
+                is_granted = application_status.lower() == "approved"
+                reason = None if is_granted else f"Application status: {application_status}"
+                
+                # If the zone requires strict QR scan enforcement, check the access matrix
+                if is_granted and zone.require_qr_scan:
+                    access_stmt = select(ZoneAccess).where(ZoneAccess.zone_id == zone_id, ZoneAccess.category_id == participant.category_id)
+                    if not (await self.session.execute(access_stmt)).scalars().first():
+                        is_granted = False
+                        reason = "Category does not have access to this zone."
+                        
+                role = participant.role
             await self.redis.set(auth_cache_key, json.dumps({"is_granted": is_granted, "reason": reason, "role": role}), ex=300)
 
         response = {

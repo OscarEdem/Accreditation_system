@@ -57,6 +57,14 @@ async def login_for_access_token(
     fetch('/api/v1/auth/login', { method: 'POST', body: params });
     ```
     """
+    # Brute Force Protection: Max 5 attempts per 5 minutes per email
+    rate_limit_key = f"rate_limit:login:{form_data.username}"
+    attempts = await redis.incr(rate_limit_key)
+    if attempts == 1:
+        await redis.expire(rate_limit_key, 300)  # 5-minute lockout window
+    if attempts > 5:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many failed login attempts. Please try again in 5 minutes.")
+
     user = await service.authenticate_user(form_data.username, form_data.password)
     if not user:
         raise HTTPException(
@@ -64,6 +72,9 @@ async def login_for_access_token(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+        
+    # Clear the rate limit on successful login
+    await redis.delete(rate_limit_key)
         
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is deactivated.")

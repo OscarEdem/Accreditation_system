@@ -1,13 +1,13 @@
 import uuid
 from typing import List, Annotated
-from fastapi import APIRouter, Depends, Form
+from fastapi import APIRouter, Depends, Form, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from fastapi import HTTPException
 from redis.asyncio import Redis
 from app.db.session import get_db
 from app.db.redis import get_redis
-from app.schemas.zone import ZoneCreate, ZoneRead, ZoneAccessCreate, ZoneMatrixItem, ZoneAccessToggleResponse
+from app.schemas.zone import ZoneCreate, ZoneRead, ZoneUpdate, ZoneAccessCreate, ZoneMatrixItem, ZoneAccessToggleResponse
 from app.services.zone import ZoneService
 from app.api.deps import get_current_user, RoleChecker
 from app.models.user import User
@@ -33,15 +33,30 @@ async def create_zone(
     db: AsyncSession = Depends(get_db),
     name: str = Form(...),
     venue_id: uuid.UUID | None = Form(None),
-    description: str | None = Form(None)
+    description: str | None = Form(None),
+    code: str | None = Form(None),
+    color: str | None = Form("#3B82F6"),
+    is_active: bool = Form(True),
+    require_qr_scan: bool = Form(True),
+    allowed_categories: list[uuid.UUID] = Form(default=[])
 ):
+    """Admin endpoint to create a new access zone with rules and styling."""
     if not venue_id:
         default_venue = await db.scalar(select(Venue).order_by(Venue.created_at.asc()).limit(1))
         if not default_venue:
             raise HTTPException(status_code=400, detail="No venues exist in the system to auto-assign.")
         venue_id = default_venue.id
         
-    zone_in = ZoneCreate(name=name, venue_id=venue_id, description=description)
+    zone_in = ZoneCreate(
+        name=name, 
+        venue_id=venue_id, 
+        description=description,
+        code=code,
+        color=color,
+        is_active=is_active,
+        require_qr_scan=require_qr_scan,
+        allowed_categories=allowed_categories
+    )
     return await service.create_zone(zone_in)
 
 @router.get("/", response_model=List[ZoneRead])
@@ -58,6 +73,98 @@ async def get_zone(
     service: ZoneService = Depends(get_zone_service)
 ):
     return await service.get_zone_by_id(zone_id)
+
+@router.patch("/{zone_id}", response_model=ZoneRead, summary="Update Zone")
+async def update_zone(
+    zone_id: uuid.UUID,
+    update_in: ZoneUpdate,
+    current_user: Annotated[User, Depends(allow_admin)],
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis)
+):
+    """Updates a zone's details, including its access rules and styling."""
+    zone = await db.get(Zone, zone_id)
+    if not zone:
+        raise HTTPException(status_code=404, detail="Zone not found")
+        
+    update_data = update_in.model_dump(exclude_unset=True)
+    allowed_categories = update_data.pop("allowed_categories", None)
+    
+    needs_cache_clear = False
+    if "is_active" in update_data and update_data["is_active"] != zone.is_active:
+        needs_cache_clear = True
+        
+    for field, value in update_data.items():
+        setattr(zone, field, value)
+        
+    if allowed_categories is not None:
+        # Safely wipe old rules and insert the updated ones
+        await db.execute(delete(ZoneAccess).where(ZoneAccess.zone_id == zone_id))
+        if allowed_categories:
+            new_access = [ZoneAccess(zone_id=zone_id, category_id=cat_id) for cat_id in allowed_categories]
+            db.add_all(new_access)
+        needs_cache_clear = True
+        
+    # Security Audit Trail
+    audit = AuditLog(
+        entity_type="zone",
+        entity_id=zone_id,
+        action="zone_updated",
+        user_id=current_user.id
+    )
+    db.add(audit)
+
+    await db.commit()
+    await db.refresh(zone)
+    
+    # 🔒 ZERO-TRUST: Clear scanner cache if security rules changed
+    if needs_cache_clear:
+        async for key in redis.scan_iter(f"auth:*:{zone_id}"):
+            await redis.delete(key)
+            
+    return zone
+
+@router.patch("/{zone_id}/toggle-active", response_model=ZoneRead, summary="Toggle Zone Status")
+async def toggle_zone_active(
+    zone_id: uuid.UUID,
+    current_user: Annotated[User, Depends(allow_admin)],
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis)
+):
+    """Turn a zone ON or OFF. If turned OFF, it instantly revokes all cached access."""
+    zone = await db.get(Zone, zone_id)
+    if not zone:
+        raise HTTPException(status_code=404, detail="Zone not found")
+    zone.is_active = not zone.is_active
+    await db.commit()
+    await db.refresh(zone)
+    
+    # 🔒 ZERO-TRUST: If deactivated, instantly lock everyone out by clearing the auth cache
+    if not zone.is_active:
+        async for key in redis.scan_iter(f"auth:*:{zone_id}"):
+            await redis.delete(key)
+            
+    return zone
+
+@router.delete("/{zone_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete Zone")
+async def delete_zone(
+    zone_id: uuid.UUID,
+    current_user: Annotated[User, Depends(allow_admin)],
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis)
+):
+    """Permanently deletes a zone and its associated access rules."""
+    zone = await db.get(Zone, zone_id)
+    if not zone:
+        raise HTTPException(status_code=404, detail="Zone not found")
+        
+    await db.execute(delete(ZoneAccess).where(ZoneAccess.zone_id == zone_id))
+    await db.delete(zone)
+    await db.commit()
+    
+    # 🔒 ZERO-TRUST: Instantly invalidate scanner cache for the deleted zone
+    async for key in redis.scan_iter(f"auth:*:{zone_id}"):
+        await redis.delete(key)
 
 @router.post("/{zone_id}/access", status_code=201)
 async def grant_zone_access(

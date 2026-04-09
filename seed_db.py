@@ -86,7 +86,7 @@ async def seed_database():
             {"name": "Team Zimbabwe", "type": "Country Team"},
             {"name": "LOC Staff", "type": "LOC"},
             {"name": "Media", "type": "Media"},
-            {"name": "Technical Official", "type": "Technical Official"},
+            {"name": "International Technical Official", "type": "Technical Official"},
             {"name": "Ghana Athletics Association", "type": "National Federation"},
             {"name": "Volunteer", "type": "Volunteer"},
             {"name": "Service Staff", "type": "Service Staff"},

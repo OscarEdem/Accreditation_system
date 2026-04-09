@@ -150,7 +150,7 @@ async def clear_database(
         "Team Rwanda", "Team São Tomé and Príncipe", "Team Senegal", "Team Seychelles",
         "Team Sierra Leone", "Team Somalia", "Team South Africa", "Team South Sudan",
         "Team Sudan", "Team Tanzania", "Team Togo", "Team Tunisia", "Team Uganda",
-        "Team Zambia", "Team Zimbabwe", "LOC Staff", "Media", "Technical Official",
+        "Team Zambia", "Team Zimbabwe", "LOC Staff", "Media", "International Technical Official",
         "Ghana Athletics Association", "Volunteer", "Service Staff", "VIP/Guest",
         "Confederation of African Athletics", "World Athletics"
     ]
