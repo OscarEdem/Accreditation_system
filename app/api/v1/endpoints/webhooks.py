@@ -14,9 +14,10 @@ async def sendgrid_webhook(request: Request):
     Webhook to receive Bounce, Dropped, and Spam Complaint notifications from SendGrid.
     """
     # SECURITY: Verify the request actually came from SendGrid
-    public_key = getattr(settings, "SENDGRID_WEBHOOK_PUBLIC_KEY", None)
-    if public_key:
+    public_key_str = getattr(settings, "SENDGRID_WEBHOOK_PUBLIC_KEY", None)
+    if public_key_str:
         ew = EventWebhook()
+        public_key = ew.convert_public_key_to_ecdsa(public_key_str)
         signature = request.headers.get('X-Twilio-Email-Event-Webhook-Signature')
         timestamp = request.headers.get('X-Twilio-Email-Event-Webhook-Timestamp')
         body = await request.body()

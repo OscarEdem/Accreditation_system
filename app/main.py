@@ -127,8 +127,9 @@ app.add_middleware(
     allow_headers=["*"],  # Allows Authorization (JWT) and Content-Type headers
 )
 
-PUBLIC_PATHS = [
-    "/docs", "/openapi.json", "/health", "/", 
+EXACT_PUBLIC_PATHS = ["/", "/health", "/openapi.json", "/docs"]
+
+PREFIX_PUBLIC_PATHS = [
     "/api/v1/auth/login", "/api/v1/auth/register",
     "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password",
     "/api/v1/auth/accept-invite", "/api/v1/auth/resend-invite",
@@ -149,7 +150,7 @@ async def global_security_middleware(request: Request, call_next):
     path = request.url.path
     
     # 1. Bypass auth for strictly public paths
-    if any(path.startswith(p) for p in PUBLIC_PATHS) or path.startswith("/api/v1/scan/live-alerts"):
+    if path in EXACT_PUBLIC_PATHS or any(path.startswith(p) for p in PREFIX_PUBLIC_PATHS) or path.startswith("/api/v1/scan/live-alerts"):
         return await call_next(request)
         
     # 2. Extract and Verify Token
@@ -200,12 +201,12 @@ def trigger_test_email(email: str, current_user: User = Depends(allow_admin)):
     """Test endpoint to trigger a Celery background task."""
     body = (
         "Hello,\n\n"
-        "This is a test of the new ASAC 2026 HTML email design.\n"
+        "This is a test of the new ACCRA 2026 HTML email design.\n"
         "If you are seeing this, the formatting engine is working perfectly!\n\n"
         "Click here to test the dynamic button extraction:\n"
         f"{settings.FRONTEND_URL}/test-link"
     )
-    task = send_email_notification.delay(email, "ASAC 2026 - HTML Template Test", body)
+    task = send_email_notification.delay(email, "ACCRA 2026 - HTML Template Test", body)
     return {"message": "Email task dispatched!", "task_id": task.id}
 
 if __name__ == "__main__":

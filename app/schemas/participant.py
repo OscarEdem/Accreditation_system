@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict
 class ParticipantRole(str, Enum):
     # Athlete / Team Official Roles
     athlete = "Athlete"
+    team_official = "Team Official"
     vip_guest = "VIP/Guest"
     chef_de_mission = "Chef De Mission (CDM)"
     media_attache = "Media Attache"

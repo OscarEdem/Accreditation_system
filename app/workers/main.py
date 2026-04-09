@@ -106,7 +106,7 @@ def send_email_notification(self, recipient_email: str, subject: str, body: str)
     logger.info(f"Preparing to send email to {recipient_email} - Subject: {subject}")
     
     sendgrid_api_key = os.getenv("SENDGRID_API_KEY")
-    from_email = os.getenv("SENDGRID_FROM_EMAIL", "noreply@asac2026.org")
+    from_email = os.getenv("SENDGRID_FROM_EMAIL", "accreditation@fasigms.africa")
     
     if not sendgrid_api_key:
         logger.warning("SENDGRID_API_KEY is not configured. Simulating email send.")
