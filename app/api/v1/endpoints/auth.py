@@ -89,7 +89,7 @@ async def login_for_access_token(
             "sub": user.email, 
             "session_id": session_id,
             "user_id": str(user.id),
-            "role": user.role.value,
+            "role": getattr(user.role, "value", user.role),
             "org_id": str(user.organization_id) if user.organization_id else None
         }, 
         expires_delta=access_token_expires
