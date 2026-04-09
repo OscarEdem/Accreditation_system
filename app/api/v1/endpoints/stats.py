@@ -9,14 +9,14 @@ from app.models.user import User
 
 router = APIRouter()
 
-allow_admin = RoleChecker(["admin", "loc_admin"])
+allow_stats_roles = RoleChecker(["admin", "loc_admin", "officer"])
 
 def get_stats_service(db: AsyncSession = Depends(get_db)) -> StatsService:
     return StatsService(db)
 
 @router.get("/", response_model=DashboardStats, summary="Get Live Dashboard Metrics")
 async def get_dashboard_stats(
-    current_user: Annotated[User, Depends(allow_admin)],
+    current_user: Annotated[User, Depends(allow_stats_roles)],
     service: StatsService = Depends(get_stats_service)
 ):
     """Returns real-time PostgreSQL aggregations to populate the top cards on the Admin Dashboard."""
