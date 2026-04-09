@@ -20,7 +20,7 @@ async def create_organization(
     current_user: Annotated[User, Depends(allow_admin)],
     service: OrganizationService = Depends(get_organization_service),
     name: str = Form(...),
-    type: str | None = Form(None),
+    type: str = Form(...),
     country: str | None = Form(None)
 ):
     """Admin endpoint to register a new organization/team in the system."""

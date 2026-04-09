@@ -6,7 +6,7 @@ from app.core.constants import ORG_ALLOWED_CATEGORIES
 
 class OrganizationBase(BaseModel):
     name: str
-    type: Optional[str] = None
+    type: str
     country: Optional[str] = None
 
 class OrganizationCreate(OrganizationBase):
