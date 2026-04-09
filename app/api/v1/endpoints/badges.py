@@ -19,8 +19,8 @@ from app.config.settings import settings
 
 router = APIRouter()
 
-# Only admins and accreditation officers should be able to generate badges
-allow_badge_roles = RoleChecker(["admin", "officer"])
+allow_badge_generate_roles = RoleChecker(["admin", "officer", "org_admin"])
+allow_badge_revoke_roles = RoleChecker(["admin", "officer"])
 
 class BatchBadgeRequest(BaseModel):
     participant_ids: List[uuid.UUID]
@@ -28,7 +28,7 @@ class BatchBadgeRequest(BaseModel):
 @router.post("/{reference_id}", status_code=201, summary="Generate Badge (Single)")
 async def generate_badge(
     reference_id: uuid.UUID,
-    current_user: Annotated[User, Depends(allow_badge_roles)],
+    current_user: Annotated[User, Depends(allow_badge_generate_roles)],
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -79,7 +79,7 @@ async def generate_badge(
 @router.post("/batch/generate", status_code=201, summary="Generate Badges (Bulk)")
 async def generate_badges_batch(
     request: BatchBadgeRequest,
-    current_user: Annotated[User, Depends(allow_badge_roles)],
+    current_user: Annotated[User, Depends(allow_badge_generate_roles)],
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -129,7 +129,7 @@ async def generate_badges_batch(
 async def update_badge_status(
     badge_id: uuid.UUID,
     update_in: BadgeUpdate,
-    current_user: Annotated[User, Depends(allow_badge_roles)],
+    current_user: Annotated[User, Depends(allow_badge_revoke_roles)],
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis)
 ):
