@@ -1,3 +1,4 @@
+import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.models.application import Application
@@ -10,9 +11,12 @@ class StatsService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_dashboard_stats(self) -> DashboardStats:
+    async def get_dashboard_stats(self, organization_id: uuid.UUID | None = None) -> DashboardStats:
         # 1. Aggregate Application Data
-        app_stmt = select(Application.status, func.count(Application.id)).group_by(Application.status)
+        app_stmt = select(Application.status, func.count(Application.id))
+        if organization_id:
+            app_stmt = app_stmt.where(Application.organization_id == organization_id)
+        app_stmt = app_stmt.group_by(Application.status)
         app_result = await self.session.execute(app_stmt)
         app_counts = dict(app_result.all())
 
@@ -23,14 +27,21 @@ class StatsService:
 
         # 2. Count Total Participants
         part_stmt = select(func.count(Participant.id))
+        if organization_id:
+            part_stmt = part_stmt.where(Participant.organization_id == organization_id)
         total_parts = (await self.session.execute(part_stmt)).scalar() or 0
 
         # 3. Count Total Organizations
         org_stmt = select(func.count(Organization.id))
+        if organization_id:
+            org_stmt = org_stmt.where(Organization.id == organization_id)
         total_orgs = (await self.session.execute(org_stmt)).scalar() or 0
 
         # 4. Aggregate Scan Data
-        scan_stmt = select(ScanLog.access_granted, func.count(ScanLog.id)).group_by(ScanLog.access_granted)
+        scan_stmt = select(ScanLog.access_granted, func.count(ScanLog.id))
+        if organization_id:
+            scan_stmt = scan_stmt.join(Participant, ScanLog.participant_id == Participant.id).where(Participant.organization_id == organization_id)
+        scan_stmt = scan_stmt.group_by(ScanLog.access_granted)
         scan_result = await self.session.execute(scan_stmt)
         scan_counts = dict(scan_result.all())
         

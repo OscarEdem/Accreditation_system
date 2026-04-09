@@ -9,7 +9,7 @@ from app.models.user import User
 
 router = APIRouter()
 
-allow_stats_roles = RoleChecker(["admin", "loc_admin", "officer"])
+allow_stats_roles = RoleChecker(["admin", "loc_admin", "officer", "org_admin"])
 
 def get_stats_service(db: AsyncSession = Depends(get_db)) -> StatsService:
     return StatsService(db)
@@ -20,4 +20,5 @@ async def get_dashboard_stats(
     service: StatsService = Depends(get_stats_service)
 ):
     """Returns real-time PostgreSQL aggregations to populate the top cards on the Admin Dashboard."""
-    return await service.get_dashboard_stats()
+    org_id = current_user.organization_id if current_user.role == "org_admin" else None
+    return await service.get_dashboard_stats(organization_id=org_id)

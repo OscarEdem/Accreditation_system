@@ -1,3 +1,4 @@
+import uuid
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy import event
@@ -24,17 +25,17 @@ def _add_tenant_scoping(execute_state: ORMExecuteState):
         if role in ["admin", "loc_admin", "officer", "scanner", None]:
             return
             
-        user_id = tenant_user_id.get()
-        org_id = tenant_org_id.get()
+        user_id_str = tenant_user_id.get()
+        org_id_str = tenant_org_id.get()
         
         # Transparently scope Application queries safely at the ORM layer
-        if role == "applicant" and user_id:
+        if role == "applicant" and user_id_str:
             execute_state.statement = execute_state.statement.options(
-                with_loader_criteria(Application, Application.user_id == user_id)
+                with_loader_criteria(Application, Application.user_id == uuid.UUID(user_id_str))
             )
-        elif role == "org_admin" and org_id:
+        elif role == "org_admin" and org_id_str:
             execute_state.statement = execute_state.statement.options(
-                with_loader_criteria(Application, Application.organization_id == org_id)
+                with_loader_criteria(Application, Application.organization_id == uuid.UUID(org_id_str))
             )
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
