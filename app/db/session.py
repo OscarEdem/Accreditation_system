@@ -2,8 +2,7 @@ import uuid
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy import event
-from sqlalchemy.orm import Session, with_loader_criteria
-from sqlalchemy.orm.query import ORMExecuteState
+from sqlalchemy.orm import Session, with_loader_criteria, ORMExecuteState
 from app.config.settings import settings
 from app.core.tenant import tenant_user_id, tenant_role, tenant_org_id
 from app.models.application import Application
