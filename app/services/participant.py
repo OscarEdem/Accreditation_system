@@ -4,6 +4,7 @@ from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
 from app.models.participant import Participant
+from app.models.application import Application
 
 class ParticipantService:
     def __init__(self, session: AsyncSession):
@@ -13,12 +14,20 @@ class ParticipantService:
         self, 
         tournament_id: uuid.UUID | None = None,
         role: str | None = None,
+        organization_id: uuid.UUID | None = None,
+        user_id: uuid.UUID | None = None,
         skip: int = 0, 
         limit: int = 100
     ) -> tuple[list[Participant], int]:
         count_stmt = select(func.count(Participant.id))
         stmt = select(Participant)
         
+        if user_id:
+            count_stmt = count_stmt.join(Application, Participant.application_id == Application.id).where(Application.user_id == user_id)
+            stmt = stmt.join(Application, Participant.application_id == Application.id).where(Application.user_id == user_id)
+        if organization_id:
+            count_stmt = count_stmt.where(Participant.organization_id == organization_id)
+            stmt = stmt.where(Participant.organization_id == organization_id)
         if tournament_id:
             count_stmt = count_stmt.where(Participant.tournament_id == tournament_id)
             stmt = stmt.where(Participant.tournament_id == tournament_id)

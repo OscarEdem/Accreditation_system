@@ -64,12 +64,14 @@ def init_worker(**kwargs):
         safe_redis_url = settings.CELERY_BROKER_URL.split("@")[-1] if "@" in settings.CELERY_BROKER_URL else settings.CELERY_BROKER_URL
         logger.info(f"Initializing Redis connection to: {safe_redis_url}")
         try:
-            redis_client = Redis.from_url(
-                settings.CELERY_BROKER_URL,
-                socket_connect_timeout=5,
-                socket_timeout=5,
-                ssl_cert_reqs="none"
-            )
+            redis_kwargs = {
+                "socket_connect_timeout": 5,
+                "socket_timeout": 5
+            }
+            if settings.CELERY_BROKER_URL.startswith("rediss://"):
+                redis_kwargs["ssl_cert_reqs"] = "none"
+                
+            redis_client = Redis.from_url(settings.CELERY_BROKER_URL, **redis_kwargs)
             await asyncio.wait_for(redis_client.ping(), timeout=5.0)
             logger.info("Redis connection successful.")
         except Exception as e:
@@ -80,17 +82,20 @@ def init_worker(**kwargs):
     
     # 3. S3 Check
     logger.info(f"AWS S3 configured for bucket: {settings.S3_BUCKET_NAME} in region {settings.AWS_REGION}")
-    try:
-        s3_client = boto3.client(
-            "s3",
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_REGION
-        )
-        s3_client.head_bucket(Bucket=settings.S3_BUCKET_NAME)
-        logger.info("AWS S3 connection successful.")
-    except Exception as e:
-        logger.error(f"AWS S3 connection failed: {e}")
+    if settings.S3_BUCKET_NAME == "local-dummy-bucket":
+        logger.info("Local dummy S3 bucket detected. Skipping AWS connection check.")
+    else:
+        try:
+            s3_client = boto3.client(
+                "s3",
+                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                region_name=settings.AWS_REGION
+            )
+            s3_client.head_bucket(Bucket=settings.S3_BUCKET_NAME)
+            logger.info("AWS S3 connection successful.")
+        except Exception as e:
+            logger.error(f"AWS S3 connection failed: {e}")
         
     logger.info("Celery worker startup checks complete.")
 

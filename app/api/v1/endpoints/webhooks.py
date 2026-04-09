@@ -2,6 +2,8 @@ import json
 import logging
 import httpx
 from fastapi import APIRouter, Request, status, Response
+from sendgrid.helpers.eventwebhook import EventWebhook
+from app.config.settings import settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -11,6 +13,20 @@ async def sendgrid_webhook(request: Request):
     """
     Webhook to receive Bounce, Dropped, and Spam Complaint notifications from SendGrid.
     """
+    # SECURITY: Verify the request actually came from SendGrid
+    public_key = getattr(settings, "SENDGRID_WEBHOOK_PUBLIC_KEY", None)
+    if public_key:
+        ew = EventWebhook()
+        signature = request.headers.get('X-Twilio-Email-Event-Webhook-Signature')
+        timestamp = request.headers.get('X-Twilio-Email-Event-Webhook-Timestamp')
+        body = await request.body()
+        
+        if not signature or not timestamp or not ew.verify_signature(body.decode('utf-8'), signature, timestamp, public_key):
+            logger.warning("FORGERY ATTEMPT: Invalid SendGrid Webhook Signature!")
+            return Response(status_code=status.HTTP_403_FORBIDDEN)
+    else:
+        logger.warning("SENDGRID_WEBHOOK_PUBLIC_KEY not set. Webhook is running unsecured!")
+
     try:
         body = await request.body()
         payload = json.loads(body)

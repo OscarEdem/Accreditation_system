@@ -146,7 +146,7 @@ async def update_badge_status(
 @router.get("/{reference_id}/pdf", status_code=200, summary="Download PDF Badge")
 async def download_badge_pdf(
     reference_id: uuid.UUID,
-    current_user: Annotated[User, Depends(allow_badge_roles)],
+    current_user: Annotated[User, Depends(get_current_user)],
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -155,10 +155,22 @@ async def download_badge_pdf(
     **Frontend Implementation:** Set headers to expect an `application/pdf` Blob, or directly navigate the browser to this URL to trigger a native file download.
     """
     # Resolve ID to Participant ID
-    stmt = select(Participant).where((Participant.id == reference_id) | (Participant.application_id == reference_id))
-    participant = (await db.execute(stmt)).scalars().first()
-    if not participant:
+    stmt = (
+        select(Participant, Application.user_id, Application.organization_id)
+        .join(Application, Participant.application_id == Application.id)
+        .where((Participant.id == reference_id) | (Participant.application_id == reference_id))
+    )
+    row = (await db.execute(stmt)).first()
+    if not row:
         raise HTTPException(status_code=404, detail="Participant not found. Ensure the application is approved.")
+        
+    participant, app_user_id, app_org_id = row
+    
+    # SECURITY: Ensure applicants can only download their own badges, and Org Admins only their team's.
+    if current_user.role == "applicant" and app_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to download this badge.")
+    if current_user.role == "org_admin" and app_org_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Not authorized to download this badge.")
         
     participant_id = participant.id
 

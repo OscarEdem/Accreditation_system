@@ -282,7 +282,15 @@ async def get_application(
     current_user: Annotated[User, Depends(get_current_user)],
     service: ApplicationService = Depends(get_application_service)
 ):
-    return await service.get_application_by_id(application_id)
+    application = await service.get_application_by_id(application_id)
+    
+    # SECURITY: Prevent IDOR. Enforce strict ownership boundaries.
+    if current_user.role == "applicant" and application.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to view this application.")
+    if current_user.role == "org_admin" and application.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Not authorized to view this application.")
+        
+    return application
 
 @router.put("/batch/review", response_model=List[ApplicationRead])
 async def review_applications_batch(

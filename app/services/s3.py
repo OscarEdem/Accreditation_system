@@ -21,8 +21,10 @@ def create_presigned_upload_url(file_name: str, file_type: str, max_size: int, e
         region_name=settings.AWS_REGION
     )
 
-    # Generate a unique filename to prevent overwrites
-    s3_key = f"uploads/{uuid.uuid4()}-{file_name}"
+    # SECURITY: Ignore user's arbitrary filename to prevent traversal/extension spoofing.
+    # Derive a safe extension strictly from the validated MIME type.
+    extension = file_type.split("/")[-1].replace("jpeg", "jpg")
+    s3_key = f"uploads/{uuid.uuid4()}.{extension}"
 
     conditions = [
         ["content-length-range", 0, max_size],

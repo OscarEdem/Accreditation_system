@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 import asyncio
 from datetime import datetime, timezone
 from fastapi import FastAPI
+from fastapi import Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
@@ -12,6 +13,10 @@ from redis.asyncio import Redis
 from app.api.v1.router import api_router
 from app.config.settings import settings
 from app.workers.main import send_email_notification
+from app.api.deps import RoleChecker
+from app.models.user import User
+
+allow_admin = RoleChecker(["admin", "loc_admin"])
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -34,12 +39,14 @@ async def run_startup_checks():
     safe_redis_url = settings.REDIS_URL.split("@")[-1] if "@" in settings.REDIS_URL else settings.REDIS_URL
     logger.info(f"Initializing Redis connection to: {safe_redis_url}")
     try:
-        redis_client = Redis.from_url(
-            settings.REDIS_URL,
-            socket_connect_timeout=5,
-            socket_timeout=5,
-            ssl_cert_reqs="none"
-        )
+        redis_kwargs = {
+            "socket_connect_timeout": 5,
+            "socket_timeout": 5
+        }
+        if settings.REDIS_URL.startswith("rediss://"):
+            redis_kwargs["ssl_cert_reqs"] = "none"
+            
+        redis_client = Redis.from_url(settings.REDIS_URL, **redis_kwargs)
         await asyncio.wait_for(redis_client.ping(), timeout=10.0)
         logger.info("Redis connection successful.")
     except asyncio.TimeoutError:
@@ -52,6 +59,10 @@ async def run_startup_checks():
     
     def check_s3_sync():
         """Synchronous wrapper for boto3 to run in a separate thread."""
+        if settings.S3_BUCKET_NAME == "local-dummy-bucket":
+            logger.info("Local dummy S3 bucket detected. Skipping AWS connection check.")
+            return
+            
         try:
             s3_client = boto3.client(
                 "s3",
@@ -117,7 +128,7 @@ def health_check():
     return {"status": "ok", "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
 
 @app.post("/test-email", tags=["Testing"])
-def trigger_test_email(email: str):
+def trigger_test_email(email: str, current_user: User = Depends(allow_admin)):
     """Test endpoint to trigger a Celery background task."""
     body = (
         "Hello,\n\n"

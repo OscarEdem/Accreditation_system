@@ -158,9 +158,20 @@ async def forgot_password(
     return {"message": "If that email is registered, a password reset link has been sent."}
 
 @router.post("/reset-password")
-async def reset_password(request: ResetPasswordRequest, service: UserService = Depends(get_user_service)):
+async def reset_password(
+    request: ResetPasswordRequest, 
+    service: UserService = Depends(get_user_service),
+    redis: Redis = Depends(get_redis)
+):
+    is_used = await redis.get(f"used_token:{request.token}")
+    if is_used:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This password reset link has already been used.")
+
     if not await service.reset_password(request.token, request.new_password):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token")
+        
+    # Prevent token reuse (expires in 1 hour to match the token's lifespan)
+    await redis.set(f"used_token:{request.token}", "true", ex=3600)
     return {"message": "Password successfully reset."}
 
 @router.post("/invite", response_model=UserRead, status_code=201)
@@ -214,9 +225,20 @@ async def invite_user(
     return user
 
 @router.post("/accept-invite")
-async def accept_invite(request: AcceptInviteRequest, service: UserService = Depends(get_user_service)):
+async def accept_invite(
+    request: AcceptInviteRequest, 
+    service: UserService = Depends(get_user_service),
+    redis: Redis = Depends(get_redis)
+):
+    is_used = await redis.get(f"used_token:{request.token}")
+    if is_used:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This invite link has already been used.")
+
     if not await service.accept_invite(request.token, request.new_password):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired invite token")
+        
+    # Prevent token reuse (expires in 24 hours to match the token's lifespan)
+    await redis.set(f"used_token:{request.token}", "true", ex=86400)
     return {"message": "Password successfully set. You can now log in."}
 
 @router.post("/resend-invite")
