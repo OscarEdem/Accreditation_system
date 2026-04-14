@@ -109,7 +109,7 @@ def generate_html_email(subject: str, text_body: str) -> str:
       </p>
       <p class="help-text">
         If you need assistance, please contact our support team at
-        <a href="mailto:accreditation@asac2026.org">accreditation@asac2026.org</a>
+        <a href="mailto:accreditation@fasigms.africa">accreditation@fasigms.africa</a>
       </p>
     </div>
 
@@ -118,7 +118,7 @@ def generate_html_email(subject: str, text_body: str) -> str:
       <p class="footer-notice">
         If you are not the intended recipient, please ignore this mail or contact us on
       </p>
-      <a href="mailto:accreditation@asac2026.org" class="footer-support-link">accreditation@asac2026.org</a>
+      <a href="mailto:accreditation@fasigms.africa" class="footer-support-link">accreditation@fasigms.africa</a>
     </div>
   </div>
 </div>

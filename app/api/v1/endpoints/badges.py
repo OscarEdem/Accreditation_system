@@ -1,6 +1,6 @@
 import uuid
 from typing import Annotated, List
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -147,18 +147,15 @@ async def update_badge_status(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-@router.get("/{reference_id}/pdf", status_code=200, summary="Download PDF Badge")
-async def download_badge_pdf(
+@router.get("/{reference_id}/data", status_code=200, summary="Get Raw Badge Data (For Frontend PDF Generation)")
+async def get_badge_data(
     reference_id: uuid.UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Stamps the user's data (Photo, Name, QR code, Role) onto the Illustrator PDF template and returns it as a file download.
-    
-    **Frontend Implementation:** Set headers to expect an `application/pdf` Blob, or directly navigate the browser to this URL to trigger a native file download.
+    Returns all the raw data required for the frontend to render the PDF badge directly in the browser.
     """
-    # Resolve ID to Participant ID
     stmt = (
         select(Participant, Application.user_id, Application.organization_id)
         .join(Application, Participant.application_id == Application.id)
@@ -172,33 +169,36 @@ async def download_badge_pdf(
     
     # SECURITY: Ensure applicants can only download their own badges, and Org Admins only their team's.
     if str(current_user.role) == "applicant" and app_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to download this badge.")
+        raise HTTPException(status_code=403, detail="Not authorized to access this badge data.")
     if str(current_user.role) == "org_admin" and app_org_id != current_user.organization_id:
-        raise HTTPException(status_code=403, detail="Not authorized to download this badge.")
+        raise HTTPException(status_code=403, detail="Not authorized to access this badge data.")
         
-    participant_id = participant.id
-
-    service = BadgeService(db)
-    
-    # 1. Fetch the generated Badge
-    stmt = select(Badge).where(Badge.participant_id == participant_id)
+    # 1. Fetch Badge
+    stmt = select(Badge).where(Badge.participant_id == participant.id)
     badge = (await db.execute(stmt)).scalar_one_or_none()
     if not badge:
         raise HTTPException(status_code=404, detail="Badge not found. Please generate the badge first.")
 
-    # 2. Fetch Participant, Application, and User details
+    # 2. Fetch User details
     stmt = (
         select(User.first_name, User.last_name, Application.category, Application.photo_url, Application.country, Participant.role)
         .select_from(Participant)
         .join(Application, Participant.application_id == Application.id)
         .join(User, Application.user_id == User.id)
-        .where(Participant.id == participant_id)
+        .where(Participant.id == participant.id)
     )
     row = (await db.execute(stmt)).first()
-    if not row:
-        raise HTTPException(status_code=404, detail="Participant details not found.")
-
     first_name, last_name, category, photo_url, country, role = row
-    pdf_bytes = await service.generate_pdf_badge(badge, photo_url, f"{first_name} {last_name}", category, country, role)
     
-    return Response(content=pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="badge_{badge.serial_number}.pdf"'})
+    service = BadgeService(db)
+    qr_base64 = service.generate_qr_code(badge)
+    
+    return {
+        "participant_name": f"{first_name} {last_name}",
+        "role": role,
+        "category": category,
+        "country": country,
+        "photo_url": photo_url,
+        "serial_number": badge.serial_number,
+        "qr_image_base64": f"data:image/png;base64,{qr_base64}"
+    }

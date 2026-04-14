@@ -1,28 +1,15 @@
-import os
 import hmac
 import hashlib
 import json
 import uuid
 import base64
 import qrcode
-import httpx
-from datetime import datetime, timezone
 from io import BytesIO
-from PIL import Image
-from reportlab.pdfgen import canvas
-from reportlab.lib.units import inch
-from reportlab.lib.utils import ImageReader
-from pypdf import PdfReader, PdfWriter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from redis.asyncio import Redis
 from app.config.settings import settings
 from app.models.badge import Badge
-
-# In-memory cache for the PDF template to prevent disk I/O on every generation
-_TEMPLATE_CACHE: bytes | None = None
-_PHOTO_CACHE: dict[str, bytes] = {}
-_PHOTO_CACHE_LAST_CLEARED: datetime = datetime.now(timezone.utc)
 
 class BadgeService:
     def __init__(self, session: AsyncSession, redis: Redis | None = None):
@@ -112,150 +99,3 @@ class BadgeService:
         img.save(buffered, format="PNG")
         
         return base64.b64encode(buffered.getvalue()).decode("utf-8")
-
-    async def generate_pdf_badge(self, badge: Badge, photo_url: str | None, participant_name: str, category: str, country: str, role: str) -> bytes:
-        """Generates a PDF badge by overlaying user data onto the pre-designed PDF template."""
-        # Use the exact dimensions from the provided Illustrator PDF template (4.1 x 5.8 inches)
-        width, height = 295.2, 417.6
-        
-        # 1. Create a transparent overlay with ReportLab
-        overlay_buffer = BytesIO()
-        c = canvas.Canvas(overlay_buffer, pagesize=(width, height))
-
-        # Define layout configuration in exact points (1 inch = 72 points) aligned to the Illustrator template
-        LAYOUT = {
-            "photo": {"x": 38, "y": 235, "size": 140},
-            "text": {"center_x": 200, "name_y": 250, "category_y": 225, "country_y": 205, "max_width": 130},
-            "qr": {"x": (width - 95) / 2, "y": 75, "size": 95},
-            "serial": {"x": width / 2, "y": 55}
-        }
-        
-        # Role-based color mapping (RGB values 0.0 to 1.0)
-        ROLE_COLORS = {
-            "athlete": (0.12, 0.33, 0.61),    # Blue
-            "media": (0.85, 0.20, 0.20),      # Red
-            "loc": (0.18, 0.55, 0.22),        # Green
-            "technical": (0.90, 0.50, 0.10),  # Orange
-            "vip": (0.55, 0.20, 0.65),        # Purple
-        }
-        
-        cat_r, cat_g, cat_b = 0, 0, 0  # Default Black
-        for key, color in ROLE_COLORS.items():
-            if key in role.lower() or key in category.lower():
-                cat_r, cat_g, cat_b = color
-                break
-
-        # Draw Participant Photo
-        if photo_url:
-            global _PHOTO_CACHE, _PHOTO_CACHE_LAST_CLEARED
-            
-            # Automatically clear the local photo cache every 24 hours (86400 seconds)
-            now = datetime.now(timezone.utc)
-            if (now - _PHOTO_CACHE_LAST_CLEARED).total_seconds() > 86400:
-                _PHOTO_CACHE.clear()
-                _PHOTO_CACHE_LAST_CLEARED = now
-                
-            photo_bytes = _PHOTO_CACHE.get(photo_url)
-            
-            if not photo_bytes:
-                async with httpx.AsyncClient() as client:
-                    response = await client.get(photo_url)
-                    if response.status_code == 200:
-                        photo_bytes = response.content
-                        # Prevent unbounded memory growth by capping the cache at 200 photos
-                        if len(_PHOTO_CACHE) >= 200:
-                            _PHOTO_CACHE.pop(next(iter(_PHOTO_CACHE)))
-                        _PHOTO_CACHE[photo_url] = photo_bytes
-            
-            if photo_bytes:
-                # 1. Crop image to a perfect square to prevent floating or squishing
-                img = Image.open(BytesIO(photo_bytes)).convert("RGB")
-                w, h = img.size
-                min_dim = min(w, h)
-                img = img.crop((
-                    (w - min_dim) // 2,
-                    (h - min_dim) // 2,
-                    (w + min_dim) // 2,
-                    (h + min_dim) // 2
-                ))
-                img = img.resize((500, 500))
-                
-                # 2. Save back to BytesIO for ReportLab
-                cropped_io = BytesIO()
-                img.save(cropped_io, format="JPEG")
-                cropped_io.seek(0)
-                photo_img = ImageReader(cropped_io)
-                
-                # 3. Draw exactly into the printed frame
-                c.drawImage(photo_img, LAYOUT["photo"]["x"], LAYOUT["photo"]["y"], width=LAYOUT["photo"]["size"], height=LAYOUT["photo"]["size"])
-
-        # Right-side text column (aligned to specific box, not arbitrarily centered)
-        c.setFillColorRGB(0, 0, 0)
-        text_center_x = LAYOUT["text"]["center_x"]
-        
-        # NAME (big + bold)
-        name_font = "Helvetica-Bold"
-        name_size = 16
-        max_width = LAYOUT["text"]["max_width"]
-        
-        while c.stringWidth(participant_name, name_font, name_size) > max_width and name_size > 9:
-            name_size -= 1
-            
-        c.setFont(name_font, name_size)
-        c.drawCentredString(text_center_x, LAYOUT["text"]["name_y"], participant_name)
-        
-        # Switch to the role-specific color for Category and Country
-        c.setFillColorRGB(cat_r, cat_g, cat_b)
-
-        # CATEGORY
-        c.setFont("Helvetica", 11)
-        c.drawCentredString(text_center_x, LAYOUT["text"]["category_y"], category.upper())
-
-        # COUNTRY
-        c.setFont("Helvetica-Oblique", 11)
-        c.drawCentredString(text_center_x, LAYOUT["text"]["country_y"], country.upper())
-
-        # Reset back to black for the QR & Serial Number
-        c.setFillColorRGB(0, 0, 0)
-
-        # QR Code (BOTTOM CENTER)
-        qr_base64 = self.generate_qr_code(badge)
-        qr_img = ImageReader(BytesIO(base64.b64decode(qr_base64)))
-        c.drawImage(qr_img, LAYOUT["qr"]["x"], LAYOUT["qr"]["y"], width=LAYOUT["qr"]["size"], height=LAYOUT["qr"]["size"])
-
-        # Serial Number (just below QR)
-        c.setFont("Helvetica-Bold", 9)
-        c.drawCentredString(LAYOUT["serial"]["x"], LAYOUT["serial"]["y"], badge.serial_number)
-
-        c.showPage()
-        c.save()
-        overlay_buffer.seek(0)
-        
-        global _TEMPLATE_CACHE
-        if _TEMPLATE_CACHE is None:
-            # Calculate the absolute path to the project root to reliably find the PDF on AWS
-            root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            template_path = os.path.join(root_dir, "accreditation.pdf")
-            with open(template_path, "rb") as f:
-                _TEMPLATE_CACHE = f.read()
-        
-        # 2. Merge the overlay with the original PDF template
-        template_reader = PdfReader(BytesIO(_TEMPLATE_CACHE))
-        template_page = template_reader.pages[0]  # The front design page
-        
-        overlay_reader = PdfReader(overlay_buffer)
-        overlay_page = overlay_reader.pages[0]
-        
-        # Stamp the dynamic data onto the template
-        template_page.merge_page(overlay_page)
-        
-        writer = PdfWriter()
-        writer.add_page(template_page)
-        
-        # If your template has a back page (Rules/Terms), append it to the final download!
-        if len(template_reader.pages) > 1:
-            writer.add_page(template_reader.pages[1])
-            
-        final_buffer = BytesIO()
-        writer.write(final_buffer)
-        return final_buffer.getvalue()
