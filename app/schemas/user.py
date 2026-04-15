@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Literal
 import re
 from pydantic import BaseModel, EmailStr, ConfigDict, field_validator, ValidationInfo
 
@@ -20,7 +20,14 @@ class UserBase(BaseModel):
     role: UserRole = UserRole.applicant
     is_active: bool = True
     organization_id: uuid.UUID | None = None
-    preferred_language: str = 'en'
+    preferred_language: Literal['en', 'fr', 'pt', 'es', 'ar'] = 'en'
+
+    @field_validator('first_name', 'last_name')
+    @classmethod
+    def validate_names(cls, v: str) -> str:
+        if any(char.isdigit() for char in v):
+            raise ValueError("Names cannot contain numbers.")
+        return v
 
 class UserCreate(UserBase):
     password: str
@@ -28,8 +35,16 @@ class UserCreate(UserBase):
     @field_validator('password')
     @classmethod
     def validate_password(cls, v: str, info: ValidationInfo) -> str:
-        if len(v) < 12:
-            raise ValueError("Password must be at least 12 characters long. We recommend using a passphrase.")
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters long.")
+        if not any(char.isupper() for char in v):
+            raise ValueError("Password must contain at least one uppercase letter.")
+        if not any(char.islower() for char in v):
+            raise ValueError("Password must contain at least one lowercase letter.")
+        if not any(char.isdigit() for char in v):
+            raise ValueError("Password must contain at least one number.")
+        if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]", v):
+            raise ValueError("Password must contain at least one special character.")
         return v
 
 class UserRead(UserBase):
@@ -53,6 +68,9 @@ class UserUpdateRole(BaseModel):
 class UserUpdateStatus(BaseModel):
     is_active: bool
 
+class UserUpdateLanguage(BaseModel):
+    preferred_language: Literal['en', 'fr', 'pt', 'es', 'ar'] = 'en'
+
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
@@ -63,8 +81,16 @@ class ResetPasswordRequest(BaseModel):
     @field_validator('new_password')
     @classmethod
     def validate_password(cls, v: str, info: ValidationInfo) -> str:
-        if len(v) < 12:
-            raise ValueError("Password must be at least 12 characters long. We recommend using a passphrase.")
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters long.")
+        if not any(char.isupper() for char in v):
+            raise ValueError("Password must contain at least one uppercase letter.")
+        if not any(char.islower() for char in v):
+            raise ValueError("Password must contain at least one lowercase letter.")
+        if not any(char.isdigit() for char in v):
+            raise ValueError("Password must contain at least one number.")
+        if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]", v):
+            raise ValueError("Password must contain at least one special character.")
         return v
 
 class UserInvite(BaseModel):
@@ -73,7 +99,14 @@ class UserInvite(BaseModel):
     email: EmailStr
     role: UserRole
     organization_id: uuid.UUID | None = None
-    preferred_language: str = 'en'
+    preferred_language: Literal['en', 'fr', 'pt', 'es', 'ar'] = 'en'
+
+    @field_validator('first_name', 'last_name')
+    @classmethod
+    def validate_names(cls, v: str) -> str:
+        if any(char.isdigit() for char in v):
+            raise ValueError("Names cannot contain numbers.")
+        return v
 
 class AcceptInviteRequest(BaseModel):
     token: str
@@ -82,8 +115,16 @@ class AcceptInviteRequest(BaseModel):
     @field_validator('new_password')
     @classmethod
     def validate_password(cls, v: str, info: ValidationInfo) -> str:
-        if len(v) < 12:
-            raise ValueError("Password must be at least 12 characters long. We recommend using a passphrase.")
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters long.")
+        if not any(char.isupper() for char in v):
+            raise ValueError("Password must contain at least one uppercase letter.")
+        if not any(char.islower() for char in v):
+            raise ValueError("Password must contain at least one lowercase letter.")
+        if not any(char.isdigit() for char in v):
+            raise ValueError("Password must contain at least one number.")
+        if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]", v):
+            raise ValueError("Password must contain at least one special character.")
         return v
 
 class ResendInviteRequest(BaseModel):

@@ -1,6 +1,6 @@
 import uuid
 from datetime import timedelta
-from typing import Annotated
+from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, status, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import EmailStr
@@ -10,7 +10,7 @@ from redis.asyncio import Redis
 from app.db.session import get_db
 from app.db.redis import get_redis
 from app.schemas.token import Token
-from app.schemas.user import UserCreate, UserRead, UserMeResponse, ForgotPasswordRequest, ResetPasswordRequest, UserInvite, AcceptInviteRequest, ResendInviteRequest, UserRole
+from app.schemas.user import UserCreate, UserRead, UserMeResponse, ForgotPasswordRequest, ResetPasswordRequest, UserInvite, AcceptInviteRequest, ResendInviteRequest, UserRole, UserUpdateLanguage
 from app.services.user import UserService
 from app.core.security import create_access_token
 from app.config.settings import settings
@@ -18,7 +18,10 @@ from app.api.deps import get_current_user, RoleChecker
 from app.models.user import User
 from app.models.organization import Organization
 from app.workers.main import send_email_notification
+import logging
 from app.core.constants import ORG_ALLOWED_CATEGORIES
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -67,6 +70,7 @@ async def login_for_access_token(
 
     user = await service.authenticate_user(form_data.username, form_data.password)
     if not user:
+        logger.warning(f"Failed login attempt for user: {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -96,6 +100,21 @@ async def login_for_access_token(
     )
     return Token(access_token=access_token, token_type="bearer")
 
+async def _get_user_me_response(user: User, db: AsyncSession) -> UserMeResponse:
+    """Helper to enrich the UserMeResponse with organization details."""
+    org_name = None
+    allowed_categories = []
+    if user.organization_id:
+        org = await db.get(Organization, user.organization_id)
+        if org:
+            org_name = org.name
+            allowed_categories = ORG_ALLOWED_CATEGORIES.get(org.name, [])
+            
+    response = UserMeResponse.model_validate(user)
+    response.organization_name = org_name
+    response.allowed_categories = allowed_categories
+    return response
+
 @router.get("/me", response_model=UserMeResponse, summary="Get Current User Profile")
 async def read_users_me(
     current_user: Annotated[User, Depends(get_current_user)],
@@ -110,18 +129,23 @@ async def read_users_me(
     - **Use Case:** Use `allowed_categories` to dynamically filter the Categories dropdown 
       in the frontend application form so users only see options their organization is permitted to apply for!
     """
-    org_name = None
-    allowed_categories = []
-    if current_user.organization_id:
-        org = await db.get(Organization, current_user.organization_id)
-        if org:
-            org_name = org.name
-            allowed_categories = ORG_ALLOWED_CATEGORIES.get(org.name, [])
-            
-    response = UserMeResponse.model_validate(current_user)
-    response.organization_name = org_name
-    response.allowed_categories = allowed_categories
-    return response
+    return await _get_user_me_response(current_user, db)
+
+@router.patch("/me/language", response_model=UserMeResponse, summary="Update Preferred Language")
+async def update_my_language(
+    request: UserUpdateLanguage,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Allows a logged-in user to update their preferred language for the interface and email notifications.
+    """
+    current_user.preferred_language = request.preferred_language
+    db.add(current_user)
+    await db.commit()
+    await db.refresh(current_user)
+    
+    return await _get_user_me_response(current_user, db)
 
 @router.post("/logout")
 async def logout(
@@ -193,7 +217,7 @@ async def invite_user(
     email: EmailStr = Form(...),
     role: UserRole = Form(...),
     organization_id: str | None = Form(None),
-    preferred_language: str = Form('en')
+    preferred_language: Literal['en', 'fr', 'pt', 'es', 'ar'] = Form('en')
 ):
     # Safely convert an empty string from the Swagger UI form into a valid None
     org_uuid = None

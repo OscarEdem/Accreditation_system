@@ -4,8 +4,8 @@ import uvicorn
 from contextlib import asynccontextmanager
 import asyncio
 from datetime import datetime, timezone
-from fastapi import FastAPI
-from fastapi import Depends, Request
+from typing import Literal
+from fastapi import FastAPI, Depends, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -199,7 +199,7 @@ def health_check():
 @app.post("/test-email", tags=["Testing"])
 def trigger_test_email(
     email: str,
-    language: str = "en",
+    language: Literal['en', 'fr', 'pt', 'es', 'ar'] = "en",
     current_user: User = Depends(allow_admin)
 ):
     """Test endpoint to trigger a Celery background task."""

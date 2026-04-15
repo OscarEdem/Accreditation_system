@@ -1,8 +1,8 @@
 import uuid
 from datetime import date, datetime
 from enum import Enum
-from typing import Optional, List
-from pydantic import BaseModel, ConfigDict
+from typing import Optional, List, Literal
+from pydantic import BaseModel, ConfigDict, field_validator
 from app.schemas.document import DocumentCreate, DocumentRead
 
 class GenderEnum(str, Enum):
@@ -46,8 +46,15 @@ class ApplicationBase(BaseModel):
     dob: Optional[date] = None
     gender: Optional[GenderEnum] = None
     country: str
-    preferred_language: str = 'en'
+    preferred_language: Literal['en', 'fr', 'pt', 'es', 'ar'] = 'en'
     sporting_disciplines: Optional[List[str]] = []
+
+    @field_validator('first_name', 'last_name')
+    @classmethod
+    def validate_names(cls, v: str) -> str:
+        if any(char.isdigit() for char in v):
+            raise ValueError("Names cannot contain numbers.")
+        return v
 
 class ApplicationCreate(ApplicationBase):
     documents: List[DocumentCreate] = []

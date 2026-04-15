@@ -107,12 +107,12 @@ def generate_html_email(subject: str, text_body: str, lang: str = "en") -> str:
       ___BUTTON_HTML___
 
       <!-- Help -->
-      <h2 class="help-title">{translations.get_string('email_need_help_title', lang)}</h2>
+      <h2 class="help-title">___HELP_TITLE___</h2>
       <p class="help-text">
-        {translations.get_string('email_ignore_if_not_you', lang)}
+        ___IGNORE_TEXT___
       </p>
       <p class="help-text">
-        {translations.get_string('email_contact_support_intro', lang)}
+        ___CONTACT_INTRO___
         <a href="mailto:accreditation@fasigms.africa">accreditation@fasigms.africa</a>
       </p>
     </div>
@@ -120,7 +120,7 @@ def generate_html_email(subject: str, text_body: str, lang: str = "en") -> str:
     <!-- Footer -->
     <div class="email-footer">
       <p class="footer-notice">
-        {translations.get_string('email_footer_notice', lang)}
+        ___FOOTER_NOTICE___
       </p>
       <a href="mailto:accreditation@fasigms.africa" class="footer-support-link">accreditation@fasigms.africa</a>
     </div>
@@ -133,5 +133,10 @@ def generate_html_email(subject: str, text_body: str, lang: str = "en") -> str:
     html = template.replace("___HTML_CONTENT___", html_content)
     html = html.replace("___BUTTON_HTML___", button_html)
     html = html.replace("___SUBJECT___", subject)
+    
+    html = html.replace("___HELP_TITLE___", translations.get_string('email_need_help_title', lang))
+    html = html.replace("___IGNORE_TEXT___", translations.get_string('email_ignore_if_not_you', lang))
+    html = html.replace("___CONTACT_INTRO___", translations.get_string('email_contact_support_intro', lang))
+    html = html.replace("___FOOTER_NOTICE___", translations.get_string('email_footer_notice', lang))
     
     return html
