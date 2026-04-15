@@ -12,7 +12,7 @@ from sqlalchemy import text
 from redis.asyncio import Redis
 from botocore.exceptions import ClientError
 from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, Content
+from sendgrid.helpers.mail import Mail, Content, Cc
 from app.config.settings import settings
 from app.core.email import generate_html_email
 from app.services.translations import TranslationService
@@ -100,15 +100,44 @@ def init_worker(**kwargs):
         
     logger.info("Celery worker startup checks complete.")
 
+async def _is_org_admin(email: str) -> bool:
+    """Helper to dynamically check if an email belongs to an org_admin."""
+    try:
+        engine = create_async_engine(settings.DATABASE_URL)
+        try:
+            async with engine.connect() as conn:
+                # Using raw SQL to avoid model circular imports inside the worker
+                result = await conn.execute(text("SELECT role FROM users WHERE email = :email LIMIT 1"), {"email": email})
+                row = result.fetchone()
+                return row is not None and row[0] == "org_admin"
+        finally:
+            await engine.dispose()  # Prevent database connection leaks
+    except Exception as e:
+        logger.error(f"Failed to check user role for {email}: {e}")
+        return False
 
 @celery_app.task(name="send_email_notification", bind=True, max_retries=3)
-def send_email_notification(self, recipient_email: str, subject: str = None, body: str = None, template_key: str = None, language: str = "en", context: dict = None):
+def send_email_notification(self, recipient_email: str, subject: str = None, body: str = None, template_key: str = None, language: str = "en", context: dict = None, cc_emails: list = None):
     """Background task to send email notifications to users using SendGrid."""
     if template_key:
         translations = TranslationService()
         ctx = context or {}
         subject = translations.get_string(f"{template_key}_subject", language, **ctx)
         body = translations.get_string(f"{template_key}_body", language, **ctx)
+
+    # 1. Initialize CC list
+    final_cc_emails = list(cc_emails) if cc_emails else []
+    
+    # 2. Enforce global CC rule for org_admins
+    if asyncio.run(_is_org_admin(recipient_email)):
+        # Fetch from environment variable
+        cc_env = os.getenv("ORG_ADMIN_CC_EMAILS")
+        if cc_env:
+            required_ccs = [email.strip() for email in cc_env.split(",") if email.strip()]
+            
+            for required_cc in required_ccs:
+                if required_cc != recipient_email and required_cc not in final_cc_emails:
+                    final_cc_emails.append(required_cc)
 
     logger.info(f"Preparing to send email to {recipient_email} - Subject: {subject}")
     
@@ -132,6 +161,11 @@ def send_email_notification(self, recipient_email: str, subject: str = None, bod
     message.add_content(Content("text/plain", body))
     message.add_content(Content("text/html", html_body))
         
+    # 3. Attach CCs to the SendGrid Mail object
+    if final_cc_emails:
+        for cc_email in final_cc_emails:
+            message.add_cc(Cc(cc_email))
+
     try:
         sg = SendGridAPIClient(sendgrid_api_key)
         response = sg.send(message)
