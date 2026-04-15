@@ -10,3 +10,9 @@ class DashboardStats(BaseModel):
     total_scans: int
     granted_scans: int
     denied_scans: int
+
+class PublicStatsResponse(BaseModel):
+    total_applications: int
+    total_countries: int
+    total_categories: int
+    total_zones: int

@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import participants, applications, auth, upload, scan, badges, venues, tournaments, zones, categories, stats, organizations, users, audit_logs, gdpr, webhooks
+from app.api.v1.endpoints import participants, applications, auth, upload, scan, badges, venues, tournaments, zones, categories, stats, organizations, users, audit_logs, gdpr, webhooks, public
 
 api_router = APIRouter()
 
@@ -18,4 +18,5 @@ api_router.include_router(organizations.router, prefix="/organizations", tags=["
 api_router.include_router(users.router, prefix="/users", tags=["User Management"])
 api_router.include_router(audit_logs.router, prefix="/audit-logs", tags=["Audit & Security"])
 api_router.include_router(gdpr.router, prefix="/gdpr", tags=["GDPR & Compliance"])
+api_router.include_router(public.router, prefix="/public", tags=["Public Data"])
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
