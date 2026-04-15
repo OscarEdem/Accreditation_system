@@ -15,7 +15,14 @@
     "user_invite_subject": "ACCRA 2026 - Convite de Conta",
     "user_invite_body": "Olá {first_name},\n\nFoi convidado como '{role}' para o ACCRA 2026.\nClique aqui para definir a sua senha e aceder à sua conta (válido por 24 horas):\n{invite_link}\n\nSe este link expirou, pode solicitar um novo aqui:\n{resend_link}",
     "resend_invite_subject": "ACCRA 2026 - Novo Convite de Conta",
-    "resend_invite_body": "Olá {first_name},\n\nUm novo link de convite foi gerado para a sua conta ACCRA 2026.\nClique aqui para definir a sua senha (válido por 24 horas):\n{invite_link}",
     "test_email_subject": "ACCRA 2026 - Teste de Modelo HTML (PT)",
-    "test_email_body": "Olá {first_name},\n\nEste é um teste do novo design de e-mail HTML do ACCRA 2026 em português.\nSe estiver a ver isto, o sistema i18n está a funcionar perfeitamente!\n\nClique aqui para testar a extração dinâmica do botão:\n{test_link}"
+    "test_email_body": "Olá {first_name},\n\nEste é um teste do novo design de e-mail HTML do ACCRA 2026 em português.\nSe estiver a ver isto, o sistema i18n está a funcionar perfeitamente!\n\nClique aqui para testar a extração dinâmica do botão:\n{test_link}",
+    "email_access_link_btn": "Aceder ao Link &rarr;",
+    "email_copy_paste_hint": "Ou copie e cole o link acima no seu navegador.",
+    "email_security_notice_title": "Aviso de Segurança",
+    "email_security_notice_body": "Por favor, não partilhe este link com ninguém. Ele fornece acesso seguro à sua conta ACCRA 2026.",
+    "email_need_help_title": "Precisa de ajuda?",
+    "email_ignore_if_not_you": "Se recebeu este e-mail mas não se registou para uma conta de acreditação, por favor ignore este e-mail.",
+    "email_contact_support_intro": "Se precisar de assistência, por favor contacte a nossa equipa de suporte em",
+    "email_footer_notice": "Se não for o destinatário pretendido, por favor ignore este e-mail ou contacte-nos em"
 }

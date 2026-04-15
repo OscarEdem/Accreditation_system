@@ -120,7 +120,7 @@ def send_email_notification(self, recipient_email: str, subject: str = None, bod
         time.sleep(2)
         return {"status": "simulated", "recipient": recipient_email}
         
-    html_body = generate_html_email(subject, body)
+    html_body = generate_html_email(subject, body, lang=language)
     
     message = Mail(
         from_email=from_email,

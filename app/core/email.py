@@ -1,11 +1,15 @@
 import re
+from app.services.translations import TranslationService
 
-def generate_html_email(subject: str, text_body: str) -> str:
+def generate_html_email(subject: str, text_body: str, lang: str = "en") -> str:
     """
     Converts a plain-text email body into a beautiful ASAC 2026 HTML template.
     Automatically extracts URLs to create prominent action buttons.
     """
     # Find the first URL in the text body to use for the main button
+    
+    translations = TranslationService()
+    
     urls = re.findall(r'(https?://[^\s]+)', text_body)
     main_url = urls[0] if urls else None
     
@@ -17,14 +21,14 @@ def generate_html_email(subject: str, text_body: str) -> str:
         button_html = f"""
         <div class="url-box">
           <p class="url-display">{main_url}</p>
-          <a href="{main_url}" class="url-btn">Access Link &rarr;</a>
+          <a href="{main_url}" class="url-btn">{translations.get_string('email_access_link_btn', lang)}</a>
         </div>
-        <p class="url-hint">Or copy and paste the link above into your browser.</p>
+        <p class="url-hint">{translations.get_string('email_copy_paste_hint', lang)}</p>
         
         <div class="warning-box" role="alert">
-          <p class="warning-title">Security Notice</p>
+          <p class="warning-title">{translations.get_string('email_security_notice_title', lang)}</p>
           <p class="warning-body">
-            Please do not share this link with anyone. It provides secure access to your ACCRA 2026 account.
+            {translations.get_string('email_security_notice_body', lang)}
           </p>
         </div>
         """
@@ -103,12 +107,12 @@ def generate_html_email(subject: str, text_body: str) -> str:
       ___BUTTON_HTML___
 
       <!-- Help -->
-      <h2 class="help-title">Need help?</h2>
+      <h2 class="help-title">{translations.get_string('email_need_help_title', lang)}</h2>
       <p class="help-text">
-        If you received this email but did not register for an accreditation account, please ignore this email.
+        {translations.get_string('email_ignore_if_not_you', lang)}
       </p>
       <p class="help-text">
-        If you need assistance, please contact our support team at
+        {translations.get_string('email_contact_support_intro', lang)}
         <a href="mailto:accreditation@fasigms.africa">accreditation@fasigms.africa</a>
       </p>
     </div>
@@ -116,7 +120,7 @@ def generate_html_email(subject: str, text_body: str) -> str:
     <!-- Footer -->
     <div class="email-footer">
       <p class="footer-notice">
-        If you are not the intended recipient, please ignore this mail or contact us on
+        {translations.get_string('email_footer_notice', lang)}
       </p>
       <a href="mailto:accreditation@fasigms.africa" class="footer-support-link">accreditation@fasigms.africa</a>
     </div>
