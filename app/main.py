@@ -197,17 +197,22 @@ def health_check():
     return {"status": "ok", "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
 
 @app.post("/test-email", tags=["Testing"])
-def trigger_test_email(email: str, current_user: User = Depends(allow_admin)):
+def trigger_test_email(
+    email: str,
+    language: str = "en",
+    current_user: User = Depends(allow_admin)
+):
     """Test endpoint to trigger a Celery background task."""
-    body = (
-        "Hello,\n\n"
-        "This is a test of the new ACCRA 2026 HTML email design.\n"
-        "If you are seeing this, the formatting engine is working perfectly!\n\n"
-        "Click here to test the dynamic button extraction:\n"
-        f"{settings.FRONTEND_URL}/test-link"
+    task = send_email_notification.delay(
+        recipient_email=email,
+        template_key="test_email",
+        language=language,
+        context={
+            "first_name": current_user.first_name,
+            "test_link": f"{settings.FRONTEND_URL}/test-link"
+        }
     )
-    task = send_email_notification.delay(email, "ACCRA 2026 - HTML Template Test", body)
-    return {"message": "Email task dispatched!", "task_id": task.id}
+    return {"message": f"Email task dispatched in {language}!", "task_id": task.id}
 
 if __name__ == "__main__":
     # Allows running the app locally via `python app/main.py`

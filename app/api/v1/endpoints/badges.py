@@ -55,19 +55,20 @@ async def generate_badge(
     
     # Fetch the participant's email and first name from the linked Application
     stmt = (
-        select(Application.first_name, Application.email)
+        select(Application.first_name, Application.email, Application.preferred_language)
         .select_from(Participant)
         .join(Application, Participant.application_id == Application.id)
         .where(Participant.id == participant_id)
     )
     row = (await db.execute(stmt)).first()
     if row:
-        first_name, email = row
+        first_name, email, language = row
         download_link = f"{settings.FRONTEND_URL}/badges/download/{participant_id}"
         send_email_notification.delay(
             recipient_email=email,
-            subject="Your ACCRA 2026 Badge is Ready!",
-            body=f"Hello {first_name},\n\nYour official ACCRA 2026 accreditation badge has been generated.\n\nYou can download and print your PDF badge here:\n{download_link}\n\nPlease bring this with you to the venue."
+            template_key="badge_ready",
+            language=language or 'en',
+            context={"first_name": first_name, "download_link": download_link}
         )
     
     return {
@@ -101,18 +102,19 @@ async def generate_badges_batch(
         
     # Fetch all participants' emails and send notifications in bulk
     stmt = (
-        select(Participant.id, Application.first_name, Application.email)
+        select(Participant.id, Application.first_name, Application.email, Application.preferred_language)
         .select_from(Participant)
         .join(Application, Participant.application_id == Application.id)
         .where(Participant.id.in_(resolved_ids))
     )
     rows = (await db.execute(stmt)).all()
-    for pid, first_name, email in rows:
+    for pid, first_name, email, language in rows:
         download_link = f"{settings.FRONTEND_URL}/badges/download/{pid}"
         send_email_notification.delay(
             recipient_email=email,
-            subject="Your ACCRA 2026 Badge is Ready!",
-            body=f"Hello {first_name},\n\nYour official ACCRA 2026 accreditation badge has been generated in bulk by your organization.\n\nYou can download your PDF badge here:\n{download_link}\n\nPlease bring this with you to the venue."
+            template_key="badge_ready_bulk",
+            language=language or 'en',
+            context={"first_name": first_name, "download_link": download_link}
         )
         
     result = []

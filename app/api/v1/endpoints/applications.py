@@ -76,8 +76,9 @@ async def submit_public_application(
     
     send_email_notification.delay(
         recipient_email=application.email,
-        subject="ACCRA 2026 Application Received",
-        body=f"Hello {application.first_name},\n\nYour accreditation application for the ACCRA 2026 tournament has been successfully received and is currently under review.\n\nYou will receive another email once a decision has been made."
+        template_key="app_received",
+        language=application.preferred_language or 'en',
+        context={"first_name": application.first_name}
     )
     
     return application
@@ -139,8 +140,9 @@ async def create_applications_batch(
     for app in applications:
         send_email_notification.delay(
             recipient_email=app.email,
-            subject="ACCRA 2026 Application Received",
-            body=f"Hello {app.first_name},\n\nAn accreditation application for the ACCRA 2026 tournament has been submitted on your behalf by your organization.\n\nYou will receive another email once a decision has been made."
+            template_key="app_received_bulk",
+            language=app.preferred_language or 'en',
+            context={"first_name": app.first_name}
         )
         
     return applications
@@ -193,8 +195,9 @@ async def create_application(
     
     send_email_notification.delay(
         recipient_email=application.email,
-        subject="ACCRA 2026 Application Received",
-        body=f"Hello {application.first_name},\n\nYour accreditation application for the ACCRA 2026 tournament has been successfully received and is currently under review.\n\nYou will receive another email once a decision has been made."
+        template_key="app_received",
+        language=application.preferred_language or 'en',
+        context={"first_name": application.first_name}
     )
     
     return application
@@ -310,8 +313,9 @@ async def review_applications_batch(
         for app in applications:
             send_email_notification.delay(
                 recipient_email=app.email,
-                subject="Your Accreditation Application is Approved!",
-                body=f"Congratulations {app.first_name}, your application for category {app.category} has been approved and you are now an official Participant!"
+                template_key="app_approved",
+                language=app.preferred_language or 'en',
+                context={"first_name": app.first_name, "category": app.category}
             )
     return applications
 
@@ -329,8 +333,9 @@ async def review_application(
     if review_in.status.lower() == "approved":
         send_email_notification.delay(
             recipient_email=application.email,
-            subject="Your Accreditation Application is Approved!",
-            body=f"Congratulations {application.first_name}, your application for category {application.category} has been approved and you are now an official Participant!"
+            template_key="app_approved",
+            language=application.preferred_language or 'en',
+            context={"first_name": application.first_name, "category": application.category}
         )
             
     return application
@@ -349,7 +354,12 @@ async def review_document(
         if application:
             send_email_notification.delay(
                 recipient_email=application.email,
-                subject=f"Action Required: Update your ACCRA 2026 Document ({document.document_type.upper()})",
-                body=f"Hello {application.first_name},\n\nThere is an issue with the '{document.document_type}' document you uploaded for your accreditation application.\n\nReason: {review_in.rejection_reason}\n\nPlease log in to the portal to re-upload a valid document so your application can proceed."
+                template_key="doc_rejected",
+                language=application.preferred_language or 'en',
+                context={
+                    "first_name": application.first_name,
+                    "document_type": document.document_type.upper(),
+                    "rejection_reason": review_in.rejection_reason
+                }
             )
     return document

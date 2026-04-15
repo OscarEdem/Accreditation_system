@@ -1,0 +1,21 @@
+{
+    "badge_ready_subject": "Votre badge ACCRA 2026 est prêt !",
+    "badge_ready_body": "Bonjour {first_name},\n\nVotre badge d'accréditation officiel pour ACCRA 2026 a été généré.\n\nVous pouvez télécharger et imprimer votre badge PDF ici :\n{download_link}\n\nVeuillez l'apporter avec vous sur le site.",
+    "badge_ready_bulk_body": "Bonjour {first_name},\n\nVotre badge d'accréditation officiel pour ACCRA 2026 a été généré en masse par votre organisation.\n\nVous pouvez télécharger votre badge PDF ici :\n{download_link}\n\nVeuillez l'apporter avec vous sur le site.",
+    "app_received_subject": "Demande d'accréditation ACCRA 2026 reçue",
+    "app_received_body": "Bonjour {first_name},\n\nVotre demande d'accréditation pour le tournoi ACCRA 2026 a été reçue avec succès et est en cours d'examen.\n\nVous recevrez un autre e-mail une fois qu'une décision aura été prise.",
+    "app_received_bulk_subject": "Demande d'accréditation ACCRA 2026 reçue",
+    "app_received_bulk_body": "Bonjour {first_name},\n\nUne demande d'accréditation pour le tournoi ACCRA 2026 a été soumise en votre nom par votre organisation.\n\nVous recevrez un autre e-mail une fois qu'une décision aura été prise.",
+    "app_approved_subject": "Votre demande d'accréditation est approuvée !",
+    "app_approved_body": "Félicitations {first_name}, votre demande pour la catégorie {category} a été approuvée et vous êtes maintenant un participant officiel !",
+    "doc_rejected_subject": "Action requise : Mettez à jour votre document ACCRA 2026 ({document_type})",
+    "doc_rejected_body": "Bonjour {first_name},\n\nUn problème est survenu avec le document '{document_type}' que vous avez téléchargé pour votre demande d'accréditation.\n\nRaison : {rejection_reason}\n\nVeuillez vous connecter au portail pour télécharger à nouveau un document valide afin que votre demande puisse être traitée.",
+    "forgot_password_subject": "Accra 2026 - Demande de réinitialisation de mot de passe",
+    "forgot_password_body": "Cliquez sur le lien suivant pour réinitialiser votre mot de passe. Il expire dans 1 heure :\n\n{reset_link}",
+    "user_invite_subject": "ACCRA 2026 - Invitation de compte",
+    "user_invite_body": "Bonjour {first_name},\n\nVous avez été invité en tant que '{role}' pour ACCRA 2026.\nCliquez ici pour définir votre mot de passe et accéder à votre compte (valable 24 heures) :\n{invite_link}\n\nSi ce lien a expiré, vous pouvez en demander un nouveau ici :\n{resend_link}",
+    "resend_invite_subject": "ACCRA 2026 - Nouvelle invitation de compte",
+    "resend_invite_body": "Bonjour {first_name},\n\nUn nouveau lien d'invitation a été généré pour votre compte ACCRA 2026.\nCliquez ici pour définir votre mot de passe (valable 24 heures) :\n{invite_link}",
+    "test_email_subject": "ACCRA 2026 - Test de modèle HTML (FR)",
+    "test_email_body": "Bonjour {first_name},\n\nCeci est un test du nouveau design d'e-mail HTML ACCRA 2026 en français.\nSi vous voyez ceci, le système i18n fonctionne parfaitement !\n\nCliquez ici pour tester l'extraction dynamique du bouton :\n{test_link}"
+}

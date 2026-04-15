@@ -14,3 +14,4 @@ class User(BaseModel):
     role: Mapped[str] = mapped_column(String, default="applicant", index=True)
     organization_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    preferred_language: Mapped[str] = mapped_column(String(5), default='en', nullable=False)

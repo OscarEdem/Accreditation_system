@@ -1,0 +1,21 @@
+{
+    "badge_ready_subject": "O seu Crachá ACCRA 2026 está pronto!",
+    "badge_ready_body": "Olá {first_name},\n\nO seu crachá de acreditação oficial para o ACCRA 2026 foi gerado.\n\nPode descarregar e imprimir o seu crachá em PDF aqui:\n{download_link}\n\nPor favor, traga-o consigo para o local.",
+    "badge_ready_bulk_body": "Olá {first_name},\n\nO seu crachá de acreditação oficial para o ACCRA 2026 foi gerado em massa pela sua organização.\n\nPode descarregar o seu crachá em PDF aqui:\n{download_link}\n\nPor favor, traga-o consigo para o local.",
+    "app_received_subject": "Pedido de Acreditação ACCRA 2026 Recebido",
+    "app_received_body": "Olá {first_name},\n\nO seu pedido de acreditação para o torneio ACCRA 2026 foi recebido com sucesso e está atualmente em análise.\n\nReceberá outro e-mail assim que uma decisão for tomada.",
+    "app_received_bulk_subject": "Pedido de Acreditação ACCRA 2026 Recebido",
+    "app_received_bulk_body": "Olá {first_name},\n\nUm pedido de acreditação para o torneio ACCRA 2026 foi submetido em seu nome pela sua organização.\n\nReceberá outro e-mail assim que uma decisão for tomada.",
+    "app_approved_subject": "O seu Pedido de Acreditação foi Aprovado!",
+    "app_approved_body": "Parabéns {first_name}, o seu pedido para a categoria {category} foi aprovado e agora é um Participante oficial!",
+    "doc_rejected_subject": "Ação Necessária: Atualize o seu Documento ACCRA 2026 ({document_type})",
+    "doc_rejected_body": "Olá {first_name},\n\nHá um problema com o documento '{document_type}' que carregou para o seu pedido de acreditação.\n\nMotivo: {rejection_reason}\n\nPor favor, inicie sessão no portal para carregar novamente um documento válido para que o seu pedido possa prosseguir.",
+    "forgot_password_subject": "Accra 2026 - Pedido de Redefinição de Senha",
+    "forgot_password_body": "Clique no seguinte link para redefinir a sua senha. Expira em 1 hora:\n\n{reset_link}",
+    "user_invite_subject": "ACCRA 2026 - Convite de Conta",
+    "user_invite_body": "Olá {first_name},\n\nFoi convidado como '{role}' para o ACCRA 2026.\nClique aqui para definir a sua senha e aceder à sua conta (válido por 24 horas):\n{invite_link}\n\nSe este link expirou, pode solicitar um novo aqui:\n{resend_link}",
+    "resend_invite_subject": "ACCRA 2026 - Novo Convite de Conta",
+    "resend_invite_body": "Olá {first_name},\n\nUm novo link de convite foi gerado para a sua conta ACCRA 2026.\nClique aqui para definir a sua senha (válido por 24 horas):\n{invite_link}",
+    "test_email_subject": "ACCRA 2026 - Teste de Modelo HTML (PT)",
+    "test_email_body": "Olá {first_name},\n\nEste é um teste do novo design de e-mail HTML do ACCRA 2026 em português.\nSe estiver a ver isto, o sistema i18n está a funcionar perfeitamente!\n\nClique aqui para testar a extração dinâmica do botão:\n{test_link}"
+}

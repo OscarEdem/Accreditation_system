@@ -22,6 +22,7 @@ class Application(BaseModel):
     dob: Mapped[date | None] = mapped_column(Date, nullable=True)
     gender: Mapped[str | None] = mapped_column(String, nullable=True)
     country: Mapped[str] = mapped_column(String, nullable=False)
+    preferred_language: Mapped[str] = mapped_column(String(5), default='en', nullable=False)
     sporting_disciplines: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
     status: Mapped[str] = mapped_column(String, default="pending")
     submitted_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))

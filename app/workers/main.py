@@ -15,6 +15,7 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Content
 from app.config.settings import settings
 from app.core.email import generate_html_email
+from app.services.translations import TranslationService
 
 logger = logging.getLogger(__name__)
 
@@ -101,8 +102,14 @@ def init_worker(**kwargs):
 
 
 @celery_app.task(name="send_email_notification", bind=True, max_retries=3)
-def send_email_notification(self, recipient_email: str, subject: str, body: str):
+def send_email_notification(self, recipient_email: str, subject: str = None, body: str = None, template_key: str = None, language: str = "en", context: dict = None):
     """Background task to send email notifications to users using SendGrid."""
+    if template_key:
+        translations = TranslationService()
+        ctx = context or {}
+        subject = translations.get_string(f"{template_key}_subject", language, **ctx)
+        body = translations.get_string(f"{template_key}_body", language, **ctx)
+
     logger.info(f"Preparing to send email to {recipient_email} - Subject: {subject}")
     
     sendgrid_api_key = os.getenv("SENDGRID_API_KEY")

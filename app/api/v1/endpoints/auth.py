@@ -161,8 +161,9 @@ async def forgot_password(
         reset_link = f"{settings.FRONTEND_URL}/reset-password?token={token}"
         send_email_notification.delay(
             recipient_email=user.email,
-            subject="Accra 2026 - Password Reset Request",
-            body=f"Click the following link to reset your password. It expires in 1 hour:\n\n{reset_link}"
+            template_key="forgot_password",
+            language=user.preferred_language or 'en',
+            context={"reset_link": reset_link}
         )
     return {"message": "If that email is registered, a password reset link has been sent."}
 
@@ -191,7 +192,8 @@ async def invite_user(
     last_name: str = Form(...),
     email: EmailStr = Form(...),
     role: UserRole = Form(...),
-    organization_id: str | None = Form(None)
+    organization_id: str | None = Form(None),
+    preferred_language: str = Form('en')
 ):
     # Safely convert an empty string from the Swagger UI form into a valid None
     org_uuid = None
@@ -213,7 +215,8 @@ async def invite_user(
         last_name=last_name,
         email=email,
         role=role,
-        organization_id=org_uuid
+        organization_id=org_uuid,
+        preferred_language=preferred_language
     )
     user = await service.invite_user(user_in)
     
@@ -223,13 +226,14 @@ async def invite_user(
     
     send_email_notification.delay(
         recipient_email=user.email,
-        subject="ACCRA 2026 - Account Invitation",
-        body=(
-            f"Hello {user.first_name},\n\n"
-            f"You have been invited as a '{user_in.role.value}' for ACCRA 2026.\n"
-            f"Click here to set your password and access your account (valid for 24 hours):\n{invite_link}\n\n"
-            f"If this link has expired, you can request a new one here:\n{resend_link}"
-        )
+        template_key="user_invite",
+        language=user.preferred_language or 'en',
+        context={
+            "first_name": user.first_name,
+            "role": user_in.role.value,
+            "invite_link": invite_link,
+            "resend_link": resend_link
+        }
     )
     return user
 
@@ -271,7 +275,11 @@ async def resend_invite(
         
         send_email_notification.delay(
             recipient_email=user.email,
-            subject="ACCRA 2026 - New Account Invitation",
-            body=f"Hello {user.first_name},\n\nA new invitation link has been generated for your ACCRA 2026 account.\nClick here to set your password (valid for 24 hours):\n{invite_link}"
+            template_key="resend_invite",
+            language=user.preferred_language or 'en',
+            context={
+                "first_name": user.first_name,
+                "invite_link": invite_link
+            }
         )
     return {"message": "If that email is registered, a new invite link has been sent."}

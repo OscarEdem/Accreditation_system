@@ -1,0 +1,21 @@
+{
+    "badge_ready_subject": "Your ACCRA 2026 Badge is Ready!",
+    "badge_ready_body": "Hello {first_name},\n\nYour official ACCRA 2026 accreditation badge has been generated.\n\nYou can download and print your PDF badge here:\n{download_link}\n\nPlease bring this with you to the venue.",
+    "badge_ready_bulk_body": "Hello {first_name},\n\nYour official ACCRA 2026 accreditation badge has been generated in bulk by your organization.\n\nYou can download your PDF badge here:\n{download_link}\n\nPlease bring this with you to the venue.",
+    "app_received_subject": "ACCRA 2026 Application Received",
+    "app_received_body": "Hello {first_name},\n\nYour accreditation application for the ACCRA 2026 tournament has been successfully received and is currently under review.\n\nYou will receive another email once a decision has been made.",
+    "app_received_bulk_subject": "ACCRA 2026 Application Received",
+    "app_received_bulk_body": "Hello {first_name},\n\nAn accreditation application for the ACCRA 2026 tournament has been submitted on your behalf by your organization.\n\nYou will receive another email once a decision has been made.",
+    "app_approved_subject": "Your Accreditation Application is Approved!",
+    "app_approved_body": "Congratulations {first_name}, your application for category {category} has been approved and you are now an official Participant!",
+    "doc_rejected_subject": "Action Required: Update your ACCRA 2026 Document ({document_type})",
+    "doc_rejected_body": "Hello {first_name},\n\nThere is an issue with the '{document_type}' document you uploaded for your accreditation application.\n\nReason: {rejection_reason}\n\nPlease log in to the portal to re-upload a valid document so your application can proceed.",
+    "forgot_password_subject": "Accra 2026 - Password Reset Request",
+    "forgot_password_body": "Click the following link to reset your password. It expires in 1 hour:\n\n{reset_link}",
+    "user_invite_subject": "ACCRA 2026 - Account Invitation",
+    "user_invite_body": "Hello {first_name},\n\nYou have been invited as a '{role}' for ACCRA 2026.\nClick here to set your password and access your account (valid for 24 hours):\n{invite_link}\n\nIf this link has expired, you can request a new one here:\n{resend_link}",
+    "resend_invite_subject": "ACCRA 2026 - New Account Invitation",
+    "resend_invite_body": "Hello {first_name},\n\nA new invitation link has been generated for your ACCRA 2026 account.\nClick here to set your password (valid for 24 hours):\n{invite_link}",
+    "test_email_subject": "ACCRA 2026 - HTML Template Test (EN)",
+    "test_email_body": "Hello {first_name},\n\nThis is a test of the new ACCRA 2026 HTML email design in English.\nIf you are seeing this, the i18n system is working perfectly!\n\nClick here to test the dynamic button extraction:\n{test_link}"
+}

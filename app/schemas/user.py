@@ -20,6 +20,7 @@ class UserBase(BaseModel):
     role: UserRole = UserRole.applicant
     is_active: bool = True
     organization_id: uuid.UUID | None = None
+    preferred_language: str = 'en'
 
 class UserCreate(UserBase):
     password: str
@@ -72,6 +73,7 @@ class UserInvite(BaseModel):
     email: EmailStr
     role: UserRole
     organization_id: uuid.UUID | None = None
+    preferred_language: str = 'en'
 
 class AcceptInviteRequest(BaseModel):
     token: str

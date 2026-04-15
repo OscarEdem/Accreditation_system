@@ -46,6 +46,7 @@ class ApplicationBase(BaseModel):
     dob: Optional[date] = None
     gender: Optional[GenderEnum] = None
     country: str
+    preferred_language: str = 'en'
     sporting_disciplines: Optional[List[str]] = []
 
 class ApplicationCreate(ApplicationBase):
