@@ -100,16 +100,25 @@ def init_worker(**kwargs):
         
     logger.info("Celery worker startup checks complete.")
 
-async def _is_org_admin(email: str) -> bool:
-    """Helper to dynamically check if an email belongs to an org_admin."""
+async def _is_country_team_org_admin(email: str) -> bool:
+    """Helper to dynamically check if an email belongs to an org_admin of a Country Team."""
     try:
         engine = create_async_engine(settings.DATABASE_URL)
         try:
             async with engine.connect() as conn:
                 # Using raw SQL to avoid model circular imports inside the worker
-                result = await conn.execute(text("SELECT role FROM users WHERE email = :email LIMIT 1"), {"email": email})
+                query = text("""
+                    SELECT u.role, o.name 
+                    FROM users u 
+                    LEFT JOIN organizations o ON u.organization_id = o.id 
+                    WHERE u.email = :email LIMIT 1
+                """)
+                result = await conn.execute(query, {"email": email})
                 row = result.fetchone()
-                return row is not None and row[0] == "org_admin"
+                if row:
+                    role, org_name = row
+                    return role == "org_admin" and org_name is not None and org_name.startswith("Team ")
+                return False
         finally:
             await engine.dispose()  # Prevent database connection leaks
     except Exception as e:
@@ -128,8 +137,8 @@ def send_email_notification(self, recipient_email: str, subject: str = None, bod
     # 1. Initialize CC list
     final_cc_emails = list(cc_emails) if cc_emails else []
     
-    # 2. Enforce global CC rule for org_admins
-    if asyncio.run(_is_org_admin(recipient_email)):
+    # 2. Enforce global CC rule for Country Team org_admins only
+    if asyncio.run(_is_country_team_org_admin(recipient_email)):
         # Fetch from environment variable
         cc_env = os.getenv("ORG_ADMIN_CC_EMAILS")
         if cc_env:
