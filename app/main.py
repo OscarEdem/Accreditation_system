@@ -151,13 +151,27 @@ async def global_security_middleware(request: Request, call_next):
     path = request.url.path
     
     # 1. Bypass auth for strictly public paths
-    if path in EXACT_PUBLIC_PATHS or any(path.startswith(p) for p in PREFIX_PUBLIC_PATHS) or path.startswith("/api/v1/scan/live-alerts"):
+    is_public_get = request.method == "GET" and (
+        path.startswith("/api/v1/tournaments") or 
+        path.startswith("/api/v1/organizations")
+    )
+    
+    if path in EXACT_PUBLIC_PATHS or any(path.startswith(p) for p in PREFIX_PUBLIC_PATHS) or path.startswith("/api/v1/scan/live-alerts") or is_public_get:
         return await call_next(request)
         
     # 2. Extract and Verify Token
     auth_header = request.headers.get("Authorization")
+    
+    def get_unauthorized_response(detail: str):
+        headers = {}
+        origin = request.headers.get("origin")
+        if origin:
+            headers["Access-Control-Allow-Origin"] = origin
+            headers["Access-Control-Allow-Credentials"] = "true"
+        return JSONResponse(status_code=401, content={"detail": detail}, headers=headers)
+
     if not auth_header or not auth_header.startswith("Bearer "):
-        return JSONResponse(status_code=401, content={"detail": "Missing or invalid authentication token"})
+        return get_unauthorized_response("Missing or invalid authentication token")
         
     token = auth_header.split(" ")[1]
     try:
@@ -172,7 +186,7 @@ async def global_security_middleware(request: Request, call_next):
         if active_session:
             active_session_str = active_session.decode("utf-8")
             if active_session_str == "revoked" or active_session_str != session_id:
-                return JSONResponse(status_code=401, content={"detail": "Session expired, revoked, or invalid."})
+                return get_unauthorized_response("Session expired, revoked, or invalid.")
         else:
             # RELAXED RULE: If Redis was cleared, trust the valid JWT and restore the session.
             await redis_client.set(f"active_session:{user_id}", session_id, ex=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
@@ -183,9 +197,9 @@ async def global_security_middleware(request: Request, call_next):
         tenant_org_id.set(payload.get("org_id"))
         
     except jwt.ExpiredSignatureError:
-        return JSONResponse(status_code=401, content={"detail": "Token has expired"})
+        return get_unauthorized_response("Token has expired")
     except jwt.InvalidTokenError:
-        return JSONResponse(status_code=401, content={"detail": "Invalid token"})
+        return get_unauthorized_response("Invalid token")
         
     return await call_next(request)
 

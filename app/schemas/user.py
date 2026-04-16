@@ -4,6 +4,7 @@ from enum import Enum
 from typing import List, Optional, Literal
 import re
 from pydantic import BaseModel, EmailStr, ConfigDict, field_validator, ValidationInfo
+from app.schemas.category import CategoryRead
 
 class UserRole(str, Enum):
     applicant = "applicant"
@@ -55,7 +56,7 @@ class UserRead(UserBase):
 
 class UserMeResponse(UserRead):
     organization_name: Optional[str] = None
-    allowed_categories: List[str] = []
+    allowed_categories: List[CategoryRead] = []
 
 class UserListResponse(BaseModel):
     total: int

@@ -42,7 +42,6 @@ async def create_tournament(
 
 @router.get("/", response_model=List[TournamentRead])
 async def get_tournaments(
-    current_user: Annotated[User, Depends(get_current_user)],
     service: TournamentService = Depends(get_tournament_service)
 ):
     return await service.get_tournaments()
@@ -50,7 +49,6 @@ async def get_tournaments(
 @router.get("/{tournament_id}", response_model=TournamentRead)
 async def get_tournament(
     tournament_id: uuid.UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
     service: TournamentService = Depends(get_tournament_service)
 ):
     return await service.get_tournament_by_id(tournament_id)

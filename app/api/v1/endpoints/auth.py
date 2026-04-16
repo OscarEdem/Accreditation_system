@@ -105,26 +105,29 @@ async def login_for_access_token(
 async def _get_user_me_response(user: User, db: AsyncSession) -> UserMeResponse:
     """Helper to enrich the UserMeResponse with organization details."""
     org_name = None
-    allowed_categories = []
+    allowed_categories_list = []
 
     # System-level admins see all categories.
     if user.role in [UserRole.admin, UserRole.loc_admin, UserRole.officer]:
-        all_category_names = await db.scalars(select(Category.name))
-        allowed_categories = list(all_category_names.all())
+        all_categories_result = await db.execute(select(Category))
+        allowed_categories_list = list(all_categories_result.scalars().all())
     # Organization-level users are restricted.
     elif user.organization_id:
         org = await db.get(Organization, user.organization_id)
         if org:
             org_name = org.name
-            allowed_categories = ORG_ALLOWED_CATEGORIES.get(org.name, [])
+            category_names_for_org = ORG_ALLOWED_CATEGORIES.get(org.name, [])
+            if category_names_for_org:
+                stmt = select(Category).where(Category.name.in_(category_names_for_org))
+                allowed_categories_list = list((await db.execute(stmt)).scalars().all())
     # This is a data inconsistency - an org_admin should always have an org_id.
     elif user.role == UserRole.org_admin and not user.organization_id:
         logger.warning(f"Data Inconsistency: org_admin user {user.email} (ID: {user.id}) has no organization_id assigned.")
-        allowed_categories = [] # Explicitly set to empty
+        allowed_categories_list = [] # Explicitly set to empty
             
     response = UserMeResponse.model_validate(user)
     response.organization_name = org_name
-    response.allowed_categories = allowed_categories
+    response.allowed_categories = allowed_categories_list
     return response
 
 @router.get("/me", response_model=UserMeResponse, summary="Get Current User Profile")
