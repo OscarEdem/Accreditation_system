@@ -49,7 +49,8 @@ def upgrade() -> None:
 
     # Now it's safe to delete the old categories
     for name in old_category_names:
-        op.execute(f"DELETE FROM categories WHERE name = '{name.replace(\"'\", \"''\")}'")
+        escaped_name = name.replace("'", "''")
+        op.execute(f"DELETE FROM categories WHERE name = '{escaped_name}'")
 
     # 2. Add new categories to the 'category' table
     new_categories_to_add = [
@@ -177,5 +178,6 @@ def downgrade() -> None:
     )
 
     for name in new_category_names_to_delete:
-        op.execute(f"DELETE FROM categories WHERE name = '{name.replace(\"'\", \"''\")}'")
+        escaped_name = name.replace("'", "''")
+        op.execute(f"DELETE FROM categories WHERE name = '{escaped_name}'")
     # ### end Alembic commands ###
