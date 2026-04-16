@@ -219,9 +219,22 @@ async def export_applications_csv(
     writer = csv.writer(output)
     
     if items:
-        headers = list(items[0].keys())
+        # Define explicit headers for robustness and to control column order
+        headers = [
+            "id", "tournament_id", "user_id", "first_name", "last_name", "email",
+            "organization_id", "category", "photo_url", "dob", "gender", "country",
+            "sporting_disciplines", "status", "submitted_at", "reviewer_id",
+            "reviewer_comments", "submitter_name", "document_urls"
+        ]
         writer.writerow(headers)
         for item in items:
+            # Serialize complex fields like documents and arrays into strings for CSV
+            doc_urls = [doc.file_url for doc in item.get("documents", [])]
+            item["document_urls"] = ", ".join(doc_urls)
+            
+            disciplines = item.get("sporting_disciplines", [])
+            item["sporting_disciplines"] = ", ".join(disciplines) if disciplines else ""
+
             writer.writerow([item.get(h, "") for h in headers])
     else:
         writer.writerow(["No applications found matching criteria."])

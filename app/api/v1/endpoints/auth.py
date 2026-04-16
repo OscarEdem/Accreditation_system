@@ -222,38 +222,18 @@ async def reset_password(
 
 @router.post("/invite", response_model=UserRead, status_code=201)
 async def invite_user(
+    user_in: UserInvite,
     current_user: Annotated[User, Depends(allow_admin)],
-    service: UserService = Depends(get_user_service),
-    first_name: str = Form(...),
-    last_name: str = Form(...),
-    email: EmailStr = Form(...),
-    role: UserRole = Form(...),
-    organization_id: str | None = Form(None),
-    preferred_language: Literal['en', 'fr', 'pt', 'es', 'ar'] = Form('en')
+    service: UserService = Depends(get_user_service)
 ):
-    # Safely convert an empty string from the Swagger UI form into a valid None
-    org_uuid = None
-    if organization_id and organization_id.strip():
-        try:
-            org_uuid = uuid.UUID(organization_id.strip())
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid organization_id format")
-            
     # Enforce Organization requirements based on Role
-    if role in [UserRole.org_admin, UserRole.applicant]:
-        if not org_uuid:
-            raise HTTPException(status_code=400, detail=f"An Organization must be selected for the {role.value} role.")
+    if user_in.role in [UserRole.org_admin, UserRole.applicant]:
+        if not user_in.organization_id:
+            raise HTTPException(status_code=400, detail=f"An Organization must be selected for the '{user_in.role.value}' role.")
     else:
-        org_uuid = None  # Ensure system admins/staff don't get tied to a participant organization
-            
-    user_in = UserInvite(
-        first_name=first_name,
-        last_name=last_name,
-        email=email,
-        role=role,
-        organization_id=org_uuid,
-        preferred_language=preferred_language
-    )
+        # Ensure system admins/staff don't get tied to a participant organization
+        user_in.organization_id = None
+
     user = await service.invite_user(user_in)
     
     token = service.create_invite_token(user.email)

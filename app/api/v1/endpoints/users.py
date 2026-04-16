@@ -8,9 +8,13 @@ from app.db.session import get_db
 from app.db.redis import get_redis
 from app.schemas.user import UserRead, UserUpdateRole, UserUpdateStatus, UserRole, UserListResponse
 from app.services.user import UserService
-from app.api.deps import RoleChecker
+from app.api.deps import get_current_user, RoleChecker
 from app.models.user import User
 from app.config.settings import settings
+from app.core.constants import SEEDED_ORGANIZATIONS
+from app.models.organization import Organization
+from app.core.constants import ORG_ALLOWED_CATEGORIES
+import logging
 
 router = APIRouter()
 
@@ -137,25 +141,46 @@ async def clear_database(
     await db.execute(text("DELETE FROM users WHERE role NOT IN ('admin', 'loc_admin')"))
     
     # 3. Delete all organizations except the officially seeded ones
-    SEEDED_ORGS = [
-        "Team Algeria", "Team Angola", "Team Benin", "Team Botswana", "Team Burkina Faso",
-        "Team Burundi", "Team Cabo Verde", "Team Cameroon", "Team Central African Republic",
-        "Team Chad", "Team Comoros", "Team Congo", "Team Congo (DRC)", "Team Côte d'Ivoire",
-        "Team Djibouti", "Team Egypt", "Team Equatorial Guinea", "Team Eritrea", "Team Eswatini",
-        "Team Ethiopia", "Team Gabon", "Team Gambia", "Team Ghana", "Team Guinea",
-        "Team Guinea-Bissau", "Team Kenya", "Team Lesotho", "Team Liberia", "Team Libya",
-        "Team Madagascar", "Team Malawi", "Team Mali", "Team Mauritania", "Team Mauritius",
-        "Team Morocco", "Team Mozambique", "Team Namibia", "Team Niger", "Team Nigeria",
-        "Team Rwanda", "Team São Tomé and Príncipe", "Team Senegal", "Team Seychelles",
-        "Team Sierra Leone", "Team Somalia", "Team South Africa", "Team South Sudan",
-        "Team Sudan", "Team Tanzania", "Team Togo", "Team Tunisia", "Team Uganda",
-        "Team Zambia", "Team Zimbabwe", "LOC Staff", "Media", "International Technical Official",
-        "Ghana Athletics Association", "Volunteer", "Service Staff", "VIP/Guest",
-        "Confederation of African Athletics", "World Athletics"
-    ]
-    escaped_orgs = [name.replace("'", "''") for name in SEEDED_ORGS]
-    org_names_sql = ", ".join([f"'{name}'" for name in escaped_orgs])
-    await db.execute(text(f"DELETE FROM organizations WHERE name NOT IN ({org_names_sql})"))
+    # Use parameterized query for safety and clarity
+    await db.execute(text("DELETE FROM organizations WHERE name NOT IN :seeded_orgs"), {"seeded_orgs": tuple(SEEDED_ORGANIZATIONS)})
     await db.commit()
     
     return {"message": "Database wiped successfully. Only admin users remain."}
+
+@router.get("/debug/user-categories", tags=["Debugging"], summary="Diagnose Category Issues for a User", include_in_schema=False)
+async def debug_user_categories(
+    email: str,
+    current_user: Annotated[User, Depends(allow_admin)],
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    A temporary debugging endpoint for admins to diagnose why a user 
+    might not be seeing the correct accreditation categories.
+    """
+    user_to_debug = await db.scalar(select(User).where(User.email == email))
+    if not user_to_debug:
+        raise HTTPException(status_code=404, detail=f"User with email {email} not found.")
+
+    org_name = None
+    looked_up_org = None
+    is_key_in_constants = False
+    categories_from_constants = "N/A"
+    final_allowed_categories = []
+
+    if user_to_debug.organization_id:
+        looked_up_org = await db.get(Organization, user_to_debug.organization_id)
+        if looked_up_org:
+            org_name = looked_up_org.name
+            is_key_in_constants = org_name in ORG_ALLOWED_CATEGORIES
+            categories_from_constants = ORG_ALLOWED_CATEGORIES.get(org_name, "NOT FOUND in constants.py")
+            final_allowed_categories = ORG_ALLOWED_CATEGORIES.get(org_name, [])
+
+    return {
+        "message": "Debug information for user's allowed categories. Check for mismatches or NULL values.",
+        "user_email": user_to_debug.email,
+        "user_role": user_to_debug.role,
+        "user_organization_id": str(user_to_debug.organization_id) if user_to_debug.organization_id else None,
+        "organization_name_from_db": org_name,
+        "org_name_matches_constants_key": is_key_in_constants,
+        "final_categories_returned_to_frontend": final_allowed_categories
+    }

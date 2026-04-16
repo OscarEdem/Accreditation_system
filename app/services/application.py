@@ -4,8 +4,8 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
-from app.models.application import Application
-from app.schemas.application import ApplicationCreate, ApplicationReview, ApplicationBatchReview
+from app.models.application import Application, ApplicationReadWithSubmitter
+from app.schemas.application import ApplicationCreate, ApplicationReview, ApplicationBatchReview, ApplicationRead
 from app.models.user import User
 from app.models.audit_log import AuditLog
 from app.models.document import Document
@@ -78,7 +78,7 @@ class ApplicationService:
         skip: int = 0, 
         limit: int | None = 100,
         sort_desc: bool = True
-    ) -> tuple[list[dict], int]:
+    ) -> tuple[list[ApplicationReadWithSubmitter], int]:
         count_stmt = select(func.count(Application.id))
         stmt = (
             select(Application, User.first_name, User.last_name)
@@ -113,14 +113,19 @@ class ApplicationService:
         result = await self.session.execute(stmt)
         
         applications = []
-        for app, first_name, last_name in result.all():
-            app_dict = {c.name: getattr(app, c.name) for c in app.__table__.columns}
+        for app_model, first_name, last_name in result.all():
+            # Use Pydantic model for robust serialization, including relationships
+            app_read = ApplicationRead.model_validate(app_model)
+            
             if first_name and last_name:
-                app_dict["submitter_name"] = f"{first_name} {last_name}"
+                submitter_name = f"{first_name} {last_name}"
             else:
-                app_dict["submitter_name"] = f"{app.first_name} {app.last_name} (Self)"
-            app_dict["documents"] = app.documents
-            applications.append(app_dict)
+                submitter_name = f"{app_model.first_name} {app_model.last_name} (Self)"
+            
+            # Create the final response model
+            applications.append(
+                ApplicationReadWithSubmitter(**app_read.model_dump(), submitter_name=submitter_name)
+            )
         return applications, total
 
     async def get_application_by_id(self, application_id: uuid.UUID) -> Application:
@@ -166,6 +171,20 @@ class ApplicationService:
         # Return a safe dictionary mapping to the ApplicationTrackResponse schema
         return {"reference_number": row.id, "first_name": row.first_name, "last_name": row.last_name, "status": row.status, "category": row.category, "badge_status": row.badge_status or "Pending Generation"}
 
+    async def _create_participant_from_application(self, application: Application, assigned_role: str | None):
+        """Private helper to create a Participant if one doesn't already exist for the application."""
+        # Automatically convert the Application into a Participant upon approval
+        existing = await self.session.execute(select(Participant).where(Participant.application_id == application.id))
+        if not existing.scalars().first():
+            new_participant = Participant(
+                application_id=application.id,
+                tournament_id=application.tournament_id,
+                role=assigned_role or application.category,
+                organization_id=application.organization_id,
+                sporting_disciplines=application.sporting_disciplines
+            )
+            self.session.add(new_participant)
+
     async def review_application(self, application_id: uuid.UUID, reviewer_id: uuid.UUID, review_data: ApplicationReview) -> Application:
         application = await self.get_application_by_id(application_id)
         
@@ -174,18 +193,8 @@ class ApplicationService:
         application.reviewer_comments = review_data.reviewer_comments
         application.reviewer_id = reviewer_id
         
-        # Automatically convert the Application into a Participant upon approval
         if review_data.status.lower() == "approved" and old_status != "approved":
-            existing = await self.session.execute(select(Participant).where(Participant.application_id == application.id))
-            if not existing.scalars().first():
-                new_participant = Participant(
-                    application_id=application.id,
-                    tournament_id=application.tournament_id,
-                    role=review_data.assigned_role or application.category,
-                    organization_id=application.organization_id,
-                    sporting_disciplines=application.sporting_disciplines
-                )
-                self.session.add(new_participant)
+            await self._create_participant_from_application(application, review_data.assigned_role)
 
         # Generate an Audit Log entry if the status was changed
         if old_status != review_data.status:
@@ -221,18 +230,8 @@ class ApplicationService:
             application.reviewer_comments = review_data.reviewer_comments
             application.reviewer_id = reviewer_id
             
-            # Automatically convert the Application into a Participant upon approval
             if review_data.status.lower() == "approved" and old_status != "approved":
-                existing = await self.session.execute(select(Participant).where(Participant.application_id == application.id))
-                if not existing.scalars().first():
-                    new_participant = Participant(
-                        application_id=application.id,
-                        tournament_id=application.tournament_id,
-                        role=review_data.assigned_role or application.category,
-                        organization_id=application.organization_id,
-                        sporting_disciplines=application.sporting_disciplines
-                    )
-                    self.session.add(new_participant)
+                await self._create_participant_from_application(application, review_data.assigned_role)
 
             # Generate an Audit Log entry if the status was changed
             if old_status != review_data.status:

@@ -10,6 +10,7 @@ from app.models.category import Category
 from app.models.venue import Venue
 from app.models.tournament import Tournament
 from app.schemas.application import ApplicationCategory
+from app.core.constants import SEEDED_ORGANIZATIONS
 
 async def seed_database():
     print("Connecting to live database...")
@@ -29,71 +30,15 @@ async def seed_database():
         print(f"✅ Categories Seeded: {len(new_cats)}")
 
         # 2. Seed Organizations
-        orgs_data = [
-            {"name": "Team Algeria", "type": "Country Team"},
-            {"name": "Team Angola", "type": "Country Team"},
-            {"name": "Team Benin", "type": "Country Team"},
-            {"name": "Team Botswana", "type": "Country Team"},
-            {"name": "Team Burkina Faso", "type": "Country Team"},
-            {"name": "Team Burundi", "type": "Country Team"},
-            {"name": "Team Cabo Verde", "type": "Country Team"},
-            {"name": "Team Cameroon", "type": "Country Team"},
-            {"name": "Team Central African Republic", "type": "Country Team"},
-            {"name": "Team Chad", "type": "Country Team"},
-            {"name": "Team Comoros", "type": "Country Team"},
-            {"name": "Team Congo", "type": "Country Team"},
-            {"name": "Team Congo (DRC)", "type": "Country Team"},
-            {"name": "Team Côte d'Ivoire", "type": "Country Team"},
-            {"name": "Team Djibouti", "type": "Country Team"},
-            {"name": "Team Egypt", "type": "Country Team"},
-            {"name": "Team Equatorial Guinea", "type": "Country Team"},
-            {"name": "Team Eritrea", "type": "Country Team"},
-            {"name": "Team Eswatini", "type": "Country Team"},
-            {"name": "Team Ethiopia", "type": "Country Team"},
-            {"name": "Team Gabon", "type": "Country Team"},
-            {"name": "Team Gambia", "type": "Country Team"},
-            {"name": "Team Ghana", "type": "Country Team"},
-            {"name": "Team Guinea", "type": "Country Team"},
-            {"name": "Team Guinea-Bissau", "type": "Country Team"},
-            {"name": "Team Kenya", "type": "Country Team"},
-            {"name": "Team Lesotho", "type": "Country Team"},
-            {"name": "Team Liberia", "type": "Country Team"},
-            {"name": "Team Libya", "type": "Country Team"},
-            {"name": "Team Madagascar", "type": "Country Team"},
-            {"name": "Team Malawi", "type": "Country Team"},
-            {"name": "Team Mali", "type": "Country Team"},
-            {"name": "Team Mauritania", "type": "Country Team"},
-            {"name": "Team Mauritius", "type": "Country Team"},
-            {"name": "Team Morocco", "type": "Country Team"},
-            {"name": "Team Mozambique", "type": "Country Team"},
-            {"name": "Team Namibia", "type": "Country Team"},
-            {"name": "Team Niger", "type": "Country Team"},
-            {"name": "Team Nigeria", "type": "Country Team"},
-            {"name": "Team Rwanda", "type": "Country Team"},
-            {"name": "Team São Tomé and Príncipe", "type": "Country Team"},
-            {"name": "Team Senegal", "type": "Country Team"},
-            {"name": "Team Seychelles", "type": "Country Team"},
-            {"name": "Team Sierra Leone", "type": "Country Team"},
-            {"name": "Team Somalia", "type": "Country Team"},
-            {"name": "Team South Africa", "type": "Country Team"},
-            {"name": "Team South Sudan", "type": "Country Team"},
-            {"name": "Team Sudan", "type": "Country Team"},
-            {"name": "Team Tanzania", "type": "Country Team"},
-            {"name": "Team Togo", "type": "Country Team"},
-            {"name": "Team Tunisia", "type": "Country Team"},
-            {"name": "Team Uganda", "type": "Country Team"},
-            {"name": "Team Zambia", "type": "Country Team"},
-            {"name": "Team Zimbabwe", "type": "Country Team"},
-            {"name": "LOC Staff", "type": "LOC"},
-            {"name": "Media", "type": "Media"},
-            {"name": "International Technical Official", "type": "Technical Official"},
-            {"name": "Ghana Athletics Association", "type": "National Federation"},
-            {"name": "Volunteer", "type": "Volunteer"},
-            {"name": "Service Staff", "type": "Service Staff"},
-            {"name": "VIP/Guest", "type": "VIP/Guest"},
-            {"name": "Confederation of African Athletics", "type": "African Federation"},
-            {"name": "World Athletics", "type": "World Federation"}
-        ]
+        # This mapping is illustrative. A more robust system might store types in the constants file too.
+        org_types = {name: "Country Team" for name in SEEDED_ORGANIZATIONS if name.startswith("Team")}
+        org_types.update({
+            "LOC Staff": "LOC", "Media": "Media", "International Technical Official": "Technical Official",
+            "Ghana Athletics Association": "National Federation", "Volunteer": "Volunteer",
+            "Service Staff": "Service Staff", "VIP/Guest": "VIP/Guest",
+            "Confederation of African Athletics": "African Federation", "World Athletics": "World Federation"
+        })
+        orgs_data = [{"name": name, "type": org_types.get(name, "Generic")} for name in SEEDED_ORGANIZATIONS]
         
         print(f"Seeding {len(orgs_data)} organizations...")
         result = await session.execute(select(Organization.name))
