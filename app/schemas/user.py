@@ -55,7 +55,7 @@ class UserRead(UserBase):
 
 class UserMeResponse(UserRead):
     organization_name: Optional[str] = None
-    allowed_categories: Optional[List[str]] = None
+    allowed_categories: List[str] = []
 
 class UserListResponse(BaseModel):
     total: int
