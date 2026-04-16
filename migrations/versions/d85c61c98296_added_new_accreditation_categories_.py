@@ -34,10 +34,15 @@ def upgrade() -> None:
         "Service Providers"
     ]
 
-    # FIX: Before deleting categories, first delete any ZoneAccess rules that depend on them.
-    # This prevents ForeignKeyViolationError.
     escaped_old_names = [name.replace("'", "''") for name in old_category_names]
     old_category_names_sql = ", ".join([f"'{name}'" for name in escaped_old_names])
+
+    # FIX: Before deleting categories, clear all dependencies from other tables.
+    # 1. Nullify the legacy 'category_id' in the 'participants' table.
+    op.execute(
+        f"UPDATE participants SET category_id = NULL WHERE category_id IN (SELECT id FROM categories WHERE name IN ({old_category_names_sql}))"
+    )
+    # 2. Delete access rules from the 'zone_access' table.
     op.execute(
         f"DELETE FROM zone_access WHERE category_id IN (SELECT id FROM categories WHERE name IN ({old_category_names_sql}))"
     )
@@ -160,9 +165,13 @@ def downgrade() -> None:
         "Coaches", "Team Officials", "Technical Officials", "Medical Staff", "VIP/Guests", "Volunteer", "Transport"
     ]
 
-    # FIX: Add the same safety check to the downgrade path.
     escaped_new_names = [name.replace("'", "''") for name in new_category_names_to_delete]
     new_category_names_sql = ", ".join([f"'{name}'" for name in escaped_new_names])
+
+    # FIX: Add the same safety checks to the downgrade path.
+    op.execute(
+        f"UPDATE participants SET category_id = NULL WHERE category_id IN (SELECT id FROM categories WHERE name IN ({new_category_names_sql}))"
+    )
     op.execute(
         f"DELETE FROM zone_access WHERE category_id IN (SELECT id FROM categories WHERE name IN ({new_category_names_sql}))"
     )
