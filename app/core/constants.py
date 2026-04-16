@@ -62,6 +62,7 @@ ORG_ALLOWED_CATEGORIES = {
     "VIP/Guest": ["VIP/Guests"],
     "Confederation of African Athletics": ["Technical Officials", "VIP/Guests"],
     "World Athletics": ["Technical Officials", "VIP/Guests"]
+}
 
 SEEDED_ORGANIZATIONS = [
     "Team Algeria", "Team Angola", "Team Benin", "Team Botswana", "Team Burkina Faso",
