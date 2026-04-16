@@ -133,7 +133,8 @@ PREFIX_PUBLIC_PATHS = [
     "/api/v1/auth/login", "/api/v1/auth/register",
     "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password",
     "/api/v1/auth/accept-invite", "/api/v1/auth/resend-invite",
-    "/api/v1/applications/public", "/api/v1/applications/track/status",
+    "/api/v1/public/stats", "/api/v1/applications/public", 
+    "/api/v1/applications/track/status",
     "/api/v1/webhooks/sendgrid"
 ]
 
@@ -167,10 +168,15 @@ async def global_security_middleware(request: Request, call_next):
         # 3. Global Redis Session Enforcement (Centralized Revocation)
         redis_client: Redis = request.app.state.redis
         active_session = await redis_client.get(f"active_session:{user_id}")
-        
-        if not active_session or active_session.decode("utf-8") != session_id:
-            return JSONResponse(status_code=401, content={"detail": "Session expired, revoked, or invalid."})
-            
+
+        if active_session:
+            active_session_str = active_session.decode("utf-8")
+            if active_session_str == "revoked" or active_session_str != session_id:
+                return JSONResponse(status_code=401, content={"detail": "Session expired, revoked, or invalid."})
+        else:
+            # RELAXED RULE: If Redis was cleared, trust the valid JWT and restore the session.
+            await redis_client.set(f"active_session:{user_id}", session_id, ex=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+
         # 4. Set Global Tenant Context for SQLAlchemy Scoping
         tenant_user_id.set(user_id)
         tenant_role.set(payload.get("role"))
