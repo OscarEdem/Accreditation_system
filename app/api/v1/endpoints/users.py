@@ -147,7 +147,7 @@ async def clear_database(
     
     return {"message": "Database wiped successfully. Only admin users remain."}
 
-@router.get("/debug/user-categories", tags=["Debugging"], summary="Diagnose Category Issues for a User", include_in_schema=False)
+@router.get("/debug/user-categories", tags=["Debugging"], summary="Diagnose Category Issues for a User")
 async def debug_user_categories(
     email: str,
     current_user: Annotated[User, Depends(allow_admin)],
