@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from redis.asyncio import Redis
 
 from app.db.session import get_db
@@ -17,6 +18,7 @@ from app.config.settings import settings
 from app.api.deps import get_current_user, RoleChecker
 from app.models.user import User
 from app.models.organization import Organization
+from app.models.category import Category
 from app.workers.main import send_email_notification
 import logging
 from app.core.constants import ORG_ALLOWED_CATEGORIES
@@ -104,11 +106,21 @@ async def _get_user_me_response(user: User, db: AsyncSession) -> UserMeResponse:
     """Helper to enrich the UserMeResponse with organization details."""
     org_name = None
     allowed_categories = []
-    if user.organization_id:
+
+    # System-level admins see all categories.
+    if user.role in [UserRole.admin, UserRole.loc_admin, UserRole.officer]:
+        all_category_names = await db.scalars(select(Category.name))
+        allowed_categories = list(all_category_names.all())
+    # Organization-level users are restricted.
+    elif user.organization_id:
         org = await db.get(Organization, user.organization_id)
         if org:
             org_name = org.name
             allowed_categories = ORG_ALLOWED_CATEGORIES.get(org.name, [])
+    # This is a data inconsistency - an org_admin should always have an org_id.
+    elif user.role == UserRole.org_admin and not user.organization_id:
+        logger.warning(f"Data Inconsistency: org_admin user {user.email} (ID: {user.id}) has no organization_id assigned.")
+        allowed_categories = [] # Explicitly set to empty
             
     response = UserMeResponse.model_validate(user)
     response.organization_name = org_name
