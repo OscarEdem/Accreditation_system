@@ -4,8 +4,8 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
-from app.models.application import Application, ApplicationReadWithSubmitter
-from app.schemas.application import ApplicationCreate, ApplicationReview, ApplicationBatchReview, ApplicationRead
+from app.models.application import Application
+from app.schemas.application import ApplicationCreate, ApplicationReview, ApplicationBatchReview, ApplicationRead, ApplicationReadWithSubmitter
 from app.models.user import User
 from app.models.audit_log import AuditLog
 from app.models.document import Document
