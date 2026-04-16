@@ -5,84 +5,46 @@ from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
 
 class ParticipantRole(str, Enum):
-    # Athlete / Team Official Roles
+    # == Generic Roles (Mirrors ApplicationCategory) ==
+    # These are used as fallbacks when a specific role isn't assigned.
     athlete = "Athlete"
-    team_official = "Team Official"
-    vip_guest = "VIP/Guest"
+    coaches = "Coaches"
+    team_officials = "Team Officials"
+    technical_officials = "Technical Officials"
+    medical_staff = "Medical Staff"
+    media = "Media"
+    vip_guests = "VIP/Guests"
+    loc_staff = "LOC Staff"
+    volunteer = "Volunteer"
+    security = "Security"
+    transport = "Transport"
+
+    # == Specific Granular Roles ==
+    # --- Athlete / Team Official Roles ---
     chef_de_mission = "Chef De Mission (CDM)"
     media_attache = "Media Attache"
     team_doctor = "Team Doctor"
     general_manager = "General Manager"
     physiotherapist = "Physiotherapist"
-    coach = "Coach"
     team_administrator = "Team Administrator"
     
-    # Technical and Competition Officials
+    # --- Technical and Competition Officials ---
     chief_judge = "Chief Judge"
     event_referee = "Event Referee"
     competition_director = "Competition Director"
     anti_doping_official = "Anti-Doping Official"
-    medical_official = "Medical Official"
     
-    # LOC Staff and Volunteers
-    loc_staff = "LOC Staff"
-    technical_volunteer = "Technical Volunteers"
-    media_volunteer = "Media Volunteers"
-    protocol_volunteer = "Protocol Volunteers"
-    transport_volunteer = "Transport Volunteers"
-    medical_anti_doping_volunteer = "Medical and Anti-Doping Volunteers"
-    security_volunteer = "Security Volunteers"
-    accreditation_information_volunteer = "Accreditation and Information Volunteers"
+    # --- LOC Staff and Volunteers ---
+    technical_volunteers = "Technical Volunteers"
+    media_volunteers = "Media Volunteers"
+    protocol_volunteers = "Protocol Volunteers"
+    transport_volunteers = "Transport Volunteers"
+    medical_and_anti_doping_volunteers = "Medical and Anti-Doping Volunteers"
+    security_volunteers = "Security Volunteers"
+    accreditation_and_information_volunteers = "Accreditation and Information Volunteers"
     
-    # Other Generic Categories
-    media = "Media"
-    security = "Security"
-    
-    # --- NEW CAA & WORLD ATHLETICS STANDARDS ---
-    # Generic Categories (Fallbacks)
-    category_a = "Athletes & Team Officials"
-    category_t = "Technical & Competition Officials"
-    category_l = "LOC & Workforce"
-    category_m = "Media & Broadcast"
-    category_v = "VIPs & Dignitaries"
-    category_s = "Service Providers"
-
-    # A - Athletes & Team Officials
-    athletes = "Athletes"
-    coaches = "Coaches"
-    team_managers = "Team Managers"
-    medical_personnel = "Medical Personnel"
-    nf_official = "NF Officials"
-
-    # T - Technical & Competition Officials
-    referee_judge = "Referees & Judges"
-    starter = "Starters"
-    timekeeper = "Timekeepers"
-    tech_delegate = "Tech Delegates"
-
-    # L - LOC & Workforce
-    loc_member = "LOC Members"
-    accreditation_staff = "Accreditation Staff"
-    volunteers = "Volunteers"
-    protocol_officer = "Protocol Officers"
-
-    # M - Media & Broadcast
-    written_press = "Written Press"
-    photographer = "Photographers"
-    host_broadcaster = "Host Broadcaster"
-    rights_holder = "Rights Holders"
-
-    # V - VIPs & Dignitaries
-    government_official = "Government Officials"
-    caa_council = "CAA Council"
-    sponsor = "Sponsors"
-    invited_guest = "Invited Guests"
-
-    # S - Service Providers
-    security_agency = "Security Agencies"
-    medical_service = "Medical Services"
-    it_timing = "IT & Timing"
-    venue_management = "Venue Management"
+    # --- Other Specific Roles ---
+    transport_staff = "Transport Staff"
 
 class ParticipantBase(BaseModel):
     application_id: uuid.UUID

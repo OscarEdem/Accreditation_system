@@ -16,23 +16,18 @@ class ApplicationStatus(str, Enum):
     rejected = "rejected"
     returned = "returned"
 
-class ApplicationCategory(str, Enum):
+class ApplicationCategory(str, Enum): # Updated to reflect the new list
     athlete = "Athlete"
-    team_official = "Team Official"
-    technical_competition_official = "Technical and Competition Officials"
+    coaches = "Coaches"
+    team_officials = "Team Officials"
+    technical_officials = "Technical Officials"
+    medical_staff = "Medical Staff"
+    media = "Media"
+    vip_guests = "VIP/Guests"
     loc_staff = "LOC Staff"
     volunteer = "Volunteer"
-    media = "Media"
     security = "Security"
-    vip_sponsor = "VIP and Sponsors"
-    
-    # --- NEW CAA & WORLD ATHLETICS STANDARDS ---
-    category_a = "Athletes & Team Officials"
-    category_t = "Technical & Competition Officials"
-    category_l = "LOC & Workforce"
-    category_m = "Media & Broadcast"
-    category_v = "VIPs & Dignitaries"
-    category_s = "Service Providers"
+    transport = "Transport"
 
 class ApplicationBase(BaseModel):
     tournament_id: Optional[uuid.UUID] = None

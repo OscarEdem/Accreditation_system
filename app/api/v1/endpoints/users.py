@@ -122,12 +122,11 @@ async def clear_database(
     DANGEROUS: Clears all tables in the database except for admin users.
     """
     tables_to_clear = [
-        "applications",
-        "tournaments",
-        "venues",
-        "categories",
-        "zones",
-        "audit_logs",
+        "applications", # Will cascade to participants, badges, documents, etc.
+        "zones",        # Will cascade to zone_access
+        "audit_logs",   # Contains only transactional data
+        "scan_logs",    # Contains only transactional data
+        "teams",        # Contains only transactional data
     ]
     
     # 1. Truncate all transactional tables (removes foreign key constraints on users and orgs)
