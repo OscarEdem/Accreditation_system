@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, computed_field
-from app.core.constants import ORG_ALLOWED_CATEGORIES
+from app.core.constants import ORG_TYPE_ALLOWED_CATEGORIES
 
 class OrganizationBase(BaseModel):
     name: str
@@ -26,7 +26,7 @@ class OrganizationRead(OrganizationBase):
     @computed_field
     @property
     def allowed_categories(self) -> List[str]:
-        return ORG_ALLOWED_CATEGORIES.get(self.name, [])
+        return ORG_TYPE_ALLOWED_CATEGORIES.get(self.type, [])
 
 class OrganizationListResponse(BaseModel):
     total: int

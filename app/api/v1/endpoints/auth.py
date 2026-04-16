@@ -21,7 +21,7 @@ from app.models.organization import Organization
 from app.models.category import Category
 from app.workers.main import send_email_notification
 import logging
-from app.core.constants import ORG_ALLOWED_CATEGORIES
+from app.core.constants import ORG_TYPE_ALLOWED_CATEGORIES
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +116,7 @@ async def _get_user_me_response(user: User, db: AsyncSession) -> UserMeResponse:
         org = await db.get(Organization, user.organization_id)
         if org:
             org_name = org.name
-            category_names_for_org = ORG_ALLOWED_CATEGORIES.get(org.name, [])
+            category_names_for_org = ORG_TYPE_ALLOWED_CATEGORIES.get(org.type, [])
             if category_names_for_org:
                 stmt = select(Category).where(Category.name.in_(category_names_for_org))
                 allowed_categories_list = list((await db.execute(stmt)).scalars().all())

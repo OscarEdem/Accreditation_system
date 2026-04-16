@@ -29,6 +29,7 @@ async def create_organization(
 
 @router.get("/", response_model=OrganizationListResponse, summary="List Organizations (Paginated)")
 async def get_organizations(
+    service: OrganizationService = Depends(get_organization_service),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(10, ge=1, le=100, description="Items per page"),
     search: str | None = Query(None, description="Search by organization name"),
@@ -48,7 +49,8 @@ async def get_organizations(
 @router.get("/{org_id}", response_model=OrganizationRead, summary="Get Single Organization")
 async def get_organization(
     org_id: uuid.UUID,
-    service: Organiza
+    service: OrganizationService = Depends(get_organization_service)
+):
     """Fetch details of a specific organization by its UUID."""
     return await service.get_organization_by_id(org_id)
 

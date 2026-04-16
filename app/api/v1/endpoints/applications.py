@@ -15,7 +15,7 @@ from app.workers.main import send_email_notification
 from app.models.category import Category
 from app.models.tournament import Tournament
 from app.services.organization import OrganizationService
-from app.core.constants import ORG_ALLOWED_CATEGORIES
+from app.core.constants import ORG_TYPE_ALLOWED_CATEGORIES
 
 router = APIRouter()
 
@@ -67,9 +67,10 @@ async def submit_public_application(
         org = await org_service.get_organization_by_id(application_in.organization_id)
         if not org:
             raise HTTPException(status_code=400, detail="Invalid organization_id. Organization does not exist.")
-        if org.name in ORG_ALLOWED_CATEGORIES:
-            if application_in.category.value not in ORG_ALLOWED_CATEGORIES[org.name]:
-                raise HTTPException(status_code=400, detail=f"Category '{application_in.category.value}' is not allowed for organization '{org.name}'.")
+        allowed_for_type = ORG_TYPE_ALLOWED_CATEGORIES.get(org.type, None)
+        if allowed_for_type is not None:
+            if application_in.category.value not in allowed_for_type:
+                raise HTTPException(status_code=400, detail=f"Category '{application_in.category.value}' is not allowed for organization type '{org.type}'.")
 
     application_in.user_id = None
     application = await service.create_application(application_in, bypass_duplicate_check=False)
@@ -129,11 +130,12 @@ async def create_applications_batch(
             org = org_cache[app_in.organization_id]
             if not org:
                 raise HTTPException(status_code=400, detail="Invalid organization_id. Organization does not exist.")
-            if org.name in ORG_ALLOWED_CATEGORIES:
-                # Admins and Officers can bypass the category restriction
-                is_admin = current_user.role in ["admin", "loc_admin", "officer"]
-                if app_in.category.value not in ORG_ALLOWED_CATEGORIES[org.name] and not is_admin:
-                    raise HTTPException(status_code=400, detail=f"Category '{app_in.category.value}' is not allowed for organization '{org.name}'.")
+            # Admins and Officers can bypass the category restriction
+            is_admin = current_user.role in ["admin", "loc_admin", "officer"]
+            allowed_for_type = ORG_TYPE_ALLOWED_CATEGORIES.get(org.type, None)
+            if allowed_for_type is not None and not is_admin:
+                if app_in.category.value not in allowed_for_type:
+                    raise HTTPException(status_code=400, detail=f"Category '{app_in.category.value}' is not allowed for organization type '{org.type}'.")
 
     applications = await service.create_applications_batch(applications_in, submitter_id=current_user.id)
     
@@ -177,11 +179,12 @@ async def create_application(
         org = await org_service.get_organization_by_id(application_in.organization_id)
         if not org:
             raise HTTPException(status_code=400, detail="Invalid organization_id. Organization does not exist.")
-        if org.name in ORG_ALLOWED_CATEGORIES:
-            # Admins and Officers can bypass the category restriction
-            is_admin = current_user.role in ["admin", "loc_admin", "officer"]
-            if application_in.category.value not in ORG_ALLOWED_CATEGORIES[org.name] and not is_admin:
-                raise HTTPException(status_code=400, detail=f"Category '{application_in.category.value}' is not allowed for organization '{org.name}'.")
+        # Admins and Officers can bypass the category restriction
+        is_admin = current_user.role in ["admin", "loc_admin", "officer"]
+        allowed_for_type = ORG_TYPE_ALLOWED_CATEGORIES.get(org.type, None)
+        if allowed_for_type is not None and not is_admin:
+            if application_in.category.value not in allowed_for_type:
+                raise HTTPException(status_code=400, detail=f"Category '{application_in.category.value}' is not allowed for organization type '{org.type}'.")
 
     is_privileged = current_user.role in ["admin", "loc_admin", "officer", "org_admin"]
     
