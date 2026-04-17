@@ -27,17 +27,39 @@ class ZoneService:
             
         await self.session.commit()
         await self.session.refresh(zone)
+        
+        # Attach for the Pydantic response
+        setattr(zone, "allowed_categories", allowed_categories)
         return zone
 
     async def get_zones(self) -> list[Zone]:
         stmt = select(Zone)
         result = await self.session.execute(stmt)
-        return list(result.scalars().all())
+        zones = list(result.scalars().all())
+        
+        # Fetch all access rules at once to prevent N+1 query loops
+        if zones:
+            zone_ids = [z.id for z in zones]
+            access_stmt = select(ZoneAccess.zone_id, ZoneAccess.category_id).where(ZoneAccess.zone_id.in_(zone_ids))
+            access_result = await self.session.execute(access_stmt)
+            
+            access_map = {z.id: [] for z in zones}
+            for zid, cid in access_result.all():
+                access_map[zid].append(cid)
+                
+            for z in zones:
+                setattr(z, "allowed_categories", access_map[z.id])
+                
+        return zones
 
     async def get_zone_by_id(self, zone_id: uuid.UUID) -> Zone:
         zone = await self.session.get(Zone, zone_id)
         if not zone:
             raise HTTPException(status_code=404, detail="Zone not found")
+            
+        access_stmt = select(ZoneAccess.category_id).where(ZoneAccess.zone_id == zone_id)
+        cats = list((await self.session.execute(access_stmt)).scalars().all())
+        setattr(zone, "allowed_categories", cats)
         return zone
 
     async def grant_access(self, zone_id: uuid.UUID, category_id: uuid.UUID) -> dict:

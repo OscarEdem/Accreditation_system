@@ -120,6 +120,11 @@ async def update_zone(
     # 🔒 ZERO-TRUST: O(1) Cache Invalidation via Version Bumping
     if needs_cache_clear:
         await redis.incr(f"zone_version:{zone_id}")
+        
+    # Manually fetch and attach allowed_categories for the response
+    access_stmt = select(ZoneAccess.category_id).where(ZoneAccess.zone_id == zone_id)
+    cats = list((await db.execute(access_stmt)).scalars().all())
+    setattr(zone, "allowed_categories", cats)
             
     return zone
 
@@ -141,6 +146,11 @@ async def toggle_zone_active(
     # 🔒 ZERO-TRUST: O(1) Cache Invalidation
     if not zone.is_active:
         await redis.incr(f"zone_version:{zone_id}")
+        
+    # Manually fetch and attach allowed_categories for the response
+    access_stmt = select(ZoneAccess.category_id).where(ZoneAccess.zone_id == zone_id)
+    cats = list((await db.execute(access_stmt)).scalars().all())
+    setattr(zone, "allowed_categories", cats)
             
     return zone
 

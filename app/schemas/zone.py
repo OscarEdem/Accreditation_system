@@ -28,6 +28,7 @@ class ZoneUpdate(BaseModel):
 class ZoneRead(ZoneBase):
     id: uuid.UUID
     created_at: datetime
+    allowed_categories: List[uuid.UUID] = []
     
     model_config = ConfigDict(from_attributes=True)
 
