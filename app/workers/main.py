@@ -108,7 +108,7 @@ async def _is_country_team_org_admin(email: str) -> bool:
             async with engine.connect() as conn:
                 # Using raw SQL to avoid model circular imports inside the worker
                 query = text("""
-                    SELECT u.role, o.name 
+                    SELECT u.role, o.type 
                     FROM users u 
                     LEFT JOIN organizations o ON u.organization_id = o.id 
                     WHERE u.email = :email LIMIT 1
@@ -116,8 +116,8 @@ async def _is_country_team_org_admin(email: str) -> bool:
                 result = await conn.execute(query, {"email": email})
                 row = result.fetchone()
                 if row:
-                    role, org_name = row
-                    return role == "org_admin" and org_name is not None and org_name.startswith("Team ")
+                    role, org_type = row
+                    return role == "org_admin" and org_type == "Country Team"
                 return False
         finally:
             await engine.dispose()  # Prevent database connection leaks

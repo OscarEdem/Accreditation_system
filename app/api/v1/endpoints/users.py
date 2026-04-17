@@ -13,7 +13,6 @@ from app.models.user import User
 from app.config.settings import settings
 from app.core.constants import SEEDED_ORGANIZATIONS
 from app.models.organization import Organization
-from app.core.constants import ORG_TYPE_ALLOWED_CATEGORIES
 from app.models.category import Category
 import logging
 
@@ -164,8 +163,6 @@ async def debug_user_categories(
 
     org_name = None
     org_type = None
-    is_key_in_constants = False
-    categories_from_constants = "N/A"
     final_allowed_categories = []
 
     # Get all categories for context
@@ -180,21 +177,16 @@ async def debug_user_categories(
         if looked_up_org:
             org_name = looked_up_org.name
             org_type = looked_up_org.type
-            is_key_in_constants = org_type in ORG_TYPE_ALLOWED_CATEGORIES
-            categories_from_constants = ORG_TYPE_ALLOWED_CATEGORIES.get(org_type, "NOT FOUND in constants.py")
-            if isinstance(categories_from_constants, list):
-                final_allowed_categories = categories_from_constants
+            final_allowed_categories = looked_up_org.allowed_categories or []
 
     return {
-        "message": "Debug information for user's allowed categories. Check for mismatches or NULL values.",
+        "message": "Debug information for user's allowed categories from the database.",
         "user_email": user_to_debug.email,
         "user_role": user_to_debug.role,
         "logic_path_taken": "System Admin (gets all categories)" if user_to_debug.role in [UserRole.admin, UserRole.loc_admin, UserRole.officer] else "Organization-based",
         "user_organization_id": str(user_to_debug.organization_id) if user_to_debug.organization_id else None,
         "organization_name_from_db": org_name,
         "organization_type_from_db": org_type,
-        "org_type_matches_constants_key": is_key_in_constants,
-        "categories_found_in_constants_py": categories_from_constants,
         "final_categories_returned_to_frontend": final_allowed_categories,
         "all_categories_in_system": all_system_categories
     }
