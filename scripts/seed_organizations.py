@@ -45,6 +45,10 @@ async def seed_organizations():
 
             reader = csv.DictReader(content.splitlines())
             
+            # Fix: Strip hidden newlines/spaces from CSV headers (especially the last column!)
+            if reader.fieldnames:
+                reader.fieldnames = [field.strip() for field in reader.fieldnames if field]
+            
             for row in reader:
                     # Normalize spaces: trim edges and replace multiple internal spaces with a single space
                     org_name = re.sub(r'\s+', ' ', row["Organisation"].strip())
