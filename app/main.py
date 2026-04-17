@@ -182,11 +182,7 @@ async def global_security_middleware(request: Request, call_next):
 # It will now successfully append CORS headers to all 401 responses!
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://www.fasigms.africa",
-        "https://admin.fasigms.africa",
-        "http://localhost:3000",
-    ],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

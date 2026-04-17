@@ -13,6 +13,7 @@ env:
   ECS_CLUSTER: ams-cluster                  # Replace with your actual ECS Cluster name
   ECS_API_SERVICE: ams-fastapi-task-service-2dlnwx6b
   ECS_CELERY_SERVICE: ams-celery-service
+  ECS_CELERY_BEAT_SERVICE: ams-celery-beat-task-service-nq9j101c
 
 jobs:
   build:
@@ -59,3 +60,4 @@ jobs:
       run: |
         aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_API_SERVICE }} --force-new-deployment
         aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_CELERY_SERVICE }} --force-new-deployment
+        aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_CELERY_BEAT_SERVICE }} --force-new-deployment

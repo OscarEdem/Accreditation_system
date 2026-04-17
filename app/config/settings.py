@@ -16,7 +16,13 @@ class Settings(BaseSettings):
     S3_BUCKET_NAME: str | None = None
     AWS_SES_SENDER: str | None = None
     FRONTEND_URL: str = "http://localhost:3000"
+    CORS_ORIGINS: str = "https://www.fasigms.africa,https://admin.fasigms.africa,https://dev.admin.fasigms.africa,https://dev.fasigms.africa,http://localhost:3000"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Parses the comma-separated CORS_ORIGINS string into a list of stripped origins."""
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
 settings = Settings()
