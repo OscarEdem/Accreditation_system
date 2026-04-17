@@ -25,10 +25,18 @@ async def seed_organizations():
     
     try:
         async with engine.begin() as conn:
-            with open(csv_path, mode='r', encoding='utf-8-sig') as file:
-                reader = csv.DictReader(file)
-                
-                for row in reader:
+            # Robustly read the file, falling back to Windows encoding if UTF-8 fails
+            try:
+                with open(csv_path, mode='r', encoding='utf-8-sig') as file:
+                    content = file.read()
+            except UnicodeDecodeError:
+                # Fallback for CSVs saved using standard Excel on Windows
+                with open(csv_path, mode='r', encoding='cp1252') as file:
+                    content = file.read()
+                    
+            reader = csv.DictReader(content.splitlines())
+            
+            for row in reader:
                     # Normalize spaces: trim edges and replace multiple internal spaces with a single space
                     org_name = re.sub(r'\s+', ' ', row["Organisation"].strip())
                     org_type = row["Category"].strip()

@@ -1,4 +1,4 @@
-No.,Organisation,Category,a,Team Officials,Technical Officials,LOC Staff,Volunteers,Media,VIP/Guests,Service Staff
+ï»¿No.,Organisation,Category,a,Team Officials,Technical Officials,LOC Staff,Volunteers,Media,VIP/Guests,Service Staff
 1,Team Algeria,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
 2,Team Angola,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
 3,Team Benin,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
@@ -12,7 +12,7 @@ No.,Organisation,Category,a,Team Officials,Technical Officials,LOC Staff,Volunte
 11,Team Comoros,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
 12,Team Congo,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
 13,Team Congo (DRC),African Federation,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
-14,Team Côte d'Ivoire,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
+14,Team CÃ´te d'Ivoire,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
 15,Team Djibouti,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
 16,Team Egypt,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
 17,Team Equatorial Guinea,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
@@ -39,7 +39,7 @@ No.,Organisation,Category,a,Team Officials,Technical Officials,LOC Staff,Volunte
 38,Team Niger,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
 39,Team Nigeria,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
 40,Team Rwanda,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
-41,Team São Tomé and Príncipe,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
+41,Team SÃ£o TomÃ© and PrÃ­ncipe,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
 42,Team Senegal,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
 43,Team Seychelles,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
 44,Team Sierra Leone,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
