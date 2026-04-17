@@ -231,14 +231,14 @@ async def export_applications_csv(
         ]
         writer.writerow(headers)
         for item in items:
-            # Serialize complex fields like documents and arrays into strings for CSV
-            doc_urls = [doc.file_url for doc in item.get("documents", [])]
-            item["document_urls"] = ", ".join(doc_urls)
+            item_dict = item.model_dump()
+            doc_urls = [doc.get("file_url", "") for doc in item_dict.get("documents", [])]
+            item_dict["document_urls"] = ", ".join(doc_urls)
             
-            disciplines = item.get("sporting_disciplines", [])
-            item["sporting_disciplines"] = ", ".join(disciplines) if disciplines else ""
+            disciplines = item_dict.get("sporting_disciplines", [])
+            item_dict["sporting_disciplines"] = ", ".join(disciplines) if disciplines else ""
 
-            writer.writerow([item.get(h, "") for h in headers])
+            writer.writerow([item_dict.get(h, "") for h in headers])
     else:
         writer.writerow(["No applications found matching criteria."])
         

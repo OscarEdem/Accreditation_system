@@ -22,6 +22,7 @@ from app.models.category import Category
 from app.workers.main import send_email_notification
 import logging
 from app.core.constants import ORG_TYPE_ALLOWED_CATEGORIES
+from app.schemas.category import CategoryRead
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +111,7 @@ async def _get_user_me_response(user: User, db: AsyncSession) -> UserMeResponse:
     # System-level admins see all categories.
     if user.role in [UserRole.admin, UserRole.loc_admin, UserRole.officer]:
         all_categories_result = await db.execute(select(Category))
-        allowed_categories_list = list(all_categories_result.scalars().all())
+        allowed_categories_list = [CategoryRead.model_validate(c) for c in all_categories_result.scalars().all()]
     # Organization-level users are restricted.
     elif user.organization_id:
         org = await db.get(Organization, user.organization_id)
@@ -119,7 +120,7 @@ async def _get_user_me_response(user: User, db: AsyncSession) -> UserMeResponse:
             category_names_for_org = ORG_TYPE_ALLOWED_CATEGORIES.get(org.type, [])
             if category_names_for_org:
                 stmt = select(Category).where(Category.name.in_(category_names_for_org))
-                allowed_categories_list = list((await db.execute(stmt)).scalars().all())
+                allowed_categories_list = [CategoryRead.model_validate(c) for c in (await db.execute(stmt)).scalars().all()]
     # This is a data inconsistency - an org_admin should always have an org_id.
     elif user.role == UserRole.org_admin and not user.organization_id:
         logger.warning(f"Data Inconsistency: org_admin user {user.email} (ID: {user.id}) has no organization_id assigned.")
