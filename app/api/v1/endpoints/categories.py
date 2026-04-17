@@ -29,7 +29,7 @@ async def get_categories(
     current_user: Annotated[User, Depends(get_current_user)],
     service: CategoryService = Depends(get_category_service)
 ):
-    return await service.get_categories()
+    return await service.get_categories(current_user=current_user)
 
 @router.get("/{category_id}", response_model=CategoryRead)
 async def get_category(

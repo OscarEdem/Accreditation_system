@@ -113,20 +113,6 @@ app = FastAPI(
     swagger_ui_parameters={"persistAuthorization": True}
 )
 
-# --- CORS Configuration ---
-# This allows your Next.js/React frontend to communicate with the API without browser security blocks.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://www.fasigms.africa",
-        "https://admin.fasigms.africa",
-        "http://localhost:3000",  # Allows your frontend developer to test locally
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows GET, POST, PUT, DELETE, etc.
-    allow_headers=["*"],  # Allows Authorization (JWT) and Content-Type headers
-)
-
 EXACT_PUBLIC_PATHS = ["/", "/health", "/openapi.json", "/docs"]
 
 PREFIX_PUBLIC_PATHS = [
@@ -145,9 +131,6 @@ async def global_security_middleware(request: Request, call_next):
     This guarantees that a developer forgetting `Depends(get_current_user)` 
     will not accidentally expose an endpoint.
     """
-    if request.method == "OPTIONS":
-        return await call_next(request)
-        
     path = request.url.path
     
     # 1. Bypass auth for strictly public paths
@@ -162,16 +145,8 @@ async def global_security_middleware(request: Request, call_next):
     # 2. Extract and Verify Token
     auth_header = request.headers.get("Authorization")
     
-    def get_unauthorized_response(detail: str):
-        headers = {}
-        origin = request.headers.get("origin")
-        if origin:
-            headers["Access-Control-Allow-Origin"] = origin
-            headers["Access-Control-Allow-Credentials"] = "true"
-        return JSONResponse(status_code=401, content={"detail": detail}, headers=headers)
-
     if not auth_header or not auth_header.startswith("Bearer "):
-        return get_unauthorized_response("Missing or invalid authentication token")
+        return JSONResponse(status_code=401, content={"detail": "Missing or invalid authentication token"})
         
     token = auth_header.split(" ")[1]
     try:
@@ -186,7 +161,7 @@ async def global_security_middleware(request: Request, call_next):
         if active_session:
             active_session_str = active_session.decode("utf-8")
             if active_session_str == "revoked" or active_session_str != session_id:
-                return get_unauthorized_response("Session expired, revoked, or invalid.")
+                return JSONResponse(status_code=401, content={"detail": "Session expired, revoked, or invalid."})
         else:
             # RELAXED RULE: If Redis was cleared, trust the valid JWT and restore the session.
             await redis_client.set(f"active_session:{user_id}", session_id, ex=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
@@ -197,11 +172,26 @@ async def global_security_middleware(request: Request, call_next):
         tenant_org_id.set(payload.get("org_id"))
         
     except jwt.ExpiredSignatureError:
-        return get_unauthorized_response("Token has expired")
+        return JSONResponse(status_code=401, content={"detail": "Token has expired"})
     except jwt.InvalidTokenError:
-        return get_unauthorized_response("Invalid token")
+        return JSONResponse(status_code=401, content={"detail": "Invalid token"})
         
     return await call_next(request)
+
+# --- CORS Configuration ---
+# ADDED LAST so it acts as the outermost middleware layer. 
+# It will now successfully append CORS headers to all 401 responses!
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://www.fasigms.africa",
+        "https://admin.fasigms.africa",
+        "http://localhost:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # --- Router Registration ---
 app.include_router(api_router, prefix="/api/v1")
