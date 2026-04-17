@@ -18,6 +18,7 @@ class ParticipantRole(str, Enum):
     volunteer = "Volunteer"
     security = "Security"
     transport = "Transport"
+    service_staff = "Service Staff"
 
     # == Specific Granular Roles ==
     # --- Athlete / Team Official Roles ---

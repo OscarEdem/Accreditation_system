@@ -7,13 +7,13 @@ from app.config.settings import settings
 
 # Map the CSV headers to the exact Category enums expected by your database
 CATEGORY_MAP = {
-    "a": "Athlete",  # 'a' header from CSV mapped to Athlete
-    "Team Officials": "Team Official",
-    "Technical Officials": "Technical Official",
+    "Athletes": "Athlete",  # Maps the 'Athletes' header from the CSV
+    "Team Officials": "Team Officials",
+    "Technical Officials": "Technical Officials",
     "LOC Staff": "LOC Staff",
     "Volunteers": "Volunteer",
     "Media": "Media",
-    "VIP/Guests": "VIP/Guest",
+    "VIP/Guests": "VIP/Guests",
     "Service Staff": "Service Staff"
 }
 

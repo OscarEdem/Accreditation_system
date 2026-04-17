@@ -28,6 +28,7 @@ class ApplicationCategory(str, Enum): # Updated to reflect the new list
     volunteer = "Volunteer"
     security = "Security"
     transport = "Transport"
+    service_staff = "Service Staff"
 
 class ApplicationBase(BaseModel):
     tournament_id: Optional[uuid.UUID] = None

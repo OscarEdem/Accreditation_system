@@ -21,8 +21,10 @@ class CategoryService:
     async def get_categories(self, current_user: User | None = None) -> list[Category]:
         stmt = select(Category)
         
+        user_role = getattr(current_user.role, "value", current_user.role) if current_user else None
+
         # Filter based on user's organization type if they are not a system admin
-        if current_user and current_user.role not in ["admin", "loc_admin", "officer"]:
+        if current_user and user_role not in ["admin", "loc_admin", "officer"]:
             if current_user.organization_id:
                 org = await self.session.get(Organization, current_user.organization_id)
                 if org:
@@ -31,7 +33,7 @@ class CategoryService:
                         stmt = stmt.where(Category.name.in_(allowed_names))
                     else:
                         return [] # Return empty list if no categories are permitted
-            elif current_user.role == "org_admin" and not current_user.organization_id:
+            elif user_role == "org_admin" and not current_user.organization_id:
                 return [] # Data inconsistency fallback
                 
         result = await self.session.execute(stmt)
