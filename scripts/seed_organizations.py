@@ -47,20 +47,26 @@ async def seed_organizations():
                         if row.get(csv_col, "").strip().upper() == "TRUE"
                     ]
                     
-                    # Upsert logic (Insert or Update if the organization name already exists)
-                    query = text("""
-                        INSERT INTO organizations (id, name, type, allowed_categories)
-                        VALUES (gen_random_uuid(), :name, :type, :allowed_categories)
-                        ON CONFLICT (name) DO UPDATE 
-                        SET type = EXCLUDED.type, 
-                            allowed_categories = EXCLUDED.allowed_categories;
-                    """)
+                    # Check if organization already exists since 'name' lacks a UNIQUE constraint
+                    check_query = text("SELECT id FROM organizations WHERE name = :name LIMIT 1")
+                    result = await conn.execute(check_query, {"name": org_name})
+                    existing_org = result.fetchone()
                     
-                    await conn.execute(query, {
-                        "name": org_name,
-                        "type": org_type,
-                        "allowed_categories": allowed_categories
-                    })
+                    if existing_org:
+                        # Update existing organization
+                        update_query = text("""
+                            UPDATE organizations 
+                            SET type = :type, allowed_categories = :allowed_categories 
+                            WHERE id = :id
+                        """)
+                        await conn.execute(update_query, {"type": org_type, "allowed_categories": allowed_categories, "id": existing_org[0]})
+                    else:
+                        # Insert new organization
+                        insert_query = text("""
+                            INSERT INTO organizations (id, name, type, allowed_categories)
+                            VALUES (gen_random_uuid(), :name, :type, :allowed_categories)
+                        """)
+                        await conn.execute(insert_query, {"name": org_name, "type": org_type, "allowed_categories": allowed_categories})
         print("Successfully seeded all organizations and their allowed categories from the CSV!")
     except Exception as e:
         print(f"Failed to seed database: {e}")
