@@ -165,7 +165,6 @@ async def global_security_middleware(request: Request, call_next):
         else:
             # RELAXED RULE: If Redis was cleared, trust the valid JWT and restore the session.
             await redis_client.set(f"active_session:{user_id}", session_id, ex=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
-
         # 4. Set Global Tenant Context for SQLAlchemy Scoping
         tenant_user_id.set(user_id)
         tenant_role.set(payload.get("role"))
