@@ -34,6 +34,15 @@ async def seed_organizations():
                 with open(csv_path, mode='r', encoding='cp1252') as file:
                     content = file.read()
                     
+            # 1. Auto-seed missing categories to prevent dropdown missing items
+            print("Ensuring all required categories exist in the database...")
+            for cat_name in set(CATEGORY_MAP.values()):
+                check_cat = text("SELECT id FROM categories WHERE name = :name LIMIT 1")
+                if not (await conn.execute(check_cat, {"name": cat_name})).fetchone():
+                    insert_cat = text("INSERT INTO categories (id, name, created_at) VALUES (gen_random_uuid(), :name, NOW())")
+                    await conn.execute(insert_cat, {"name": cat_name})
+                    print(f"Created missing category: {cat_name}")
+
             reader = csv.DictReader(content.splitlines())
             
             for row in reader:
