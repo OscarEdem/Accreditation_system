@@ -123,29 +123,18 @@ async def clear_database(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    DANGEROUS: Clears all tables in the database except for admin users.
+    DANGEROUS: Clears all application and participant-related data from the database.
     """
     tables_to_clear = [
         "applications", # Will cascade to participants, badges, documents, etc.
-        "zones",        # Will cascade to zone_access
-        "audit_logs",   # Contains only transactional data
-        "scan_logs",    # Contains only transactional data
-        "teams",        # Contains only transactional data
     ]
     
-    # 1. Truncate all transactional tables (removes foreign key constraints on users and orgs)
+    # Truncate applications table, which will cascade to participants, badges, and documents
     truncate_query = f"TRUNCATE {', '.join(tables_to_clear)} CASCADE;"
     await db.execute(text(truncate_query))
-    
-    # 2. Delete all users except admins and loc_admins
-    await db.execute(text("DELETE FROM users WHERE role NOT IN ('admin', 'loc_admin')"))
-    
-    # 3. Delete all organizations except the officially seeded ones
-    # Use parameterized query for safety and clarity
-    await db.execute(text("DELETE FROM organizations WHERE name NOT IN :seeded_orgs"), {"seeded_orgs": tuple(SEEDED_ORGANIZATIONS)})
     await db.commit()
     
-    return {"message": "Database wiped successfully. Only admin users remain."}
+    return {"message": "Application and participant data wiped successfully."}
 
 @router.get("/debug/user-categories", tags=["Debugging"], summary="Diagnose Category Issues for a User")
 async def debug_user_categories(
