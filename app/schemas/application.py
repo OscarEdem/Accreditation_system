@@ -36,6 +36,12 @@ class ApplicationBase(BaseModel):
     first_name: str
     last_name: str
     email: str
+    phone_number: Optional[str] = None
+    passport_number: Optional[str] = None
+    specific_role: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+    special_requirements: Optional[str] = None
     organization_id: Optional[uuid.UUID] = None
     category: ApplicationCategory
     photo_url: Optional[str] = None

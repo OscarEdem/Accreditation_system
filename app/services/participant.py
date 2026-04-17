@@ -2,6 +2,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 from app.models.participant import Participant
 from app.models.application import Application
@@ -20,7 +21,7 @@ class ParticipantService:
         limit: int = 100
     ) -> tuple[list[Participant], int]:
         count_stmt = select(func.count(Participant.id))
-        stmt = select(Participant)
+        stmt = select(Participant).options(selectinload(Participant.application).selectinload(Application.documents))
         
         if user_id:
             count_stmt = count_stmt.join(Application, Participant.application_id == Application.id).where(Application.user_id == user_id)
@@ -42,7 +43,9 @@ class ParticipantService:
         return list(result.scalars().all()), total
 
     async def get_participant_by_id(self, participant_id: uuid.UUID) -> Participant:
-        stmt = select(Participant).where(
+        stmt = select(Participant).options(
+            selectinload(Participant.application).selectinload(Application.documents)
+        ).where(
             (Participant.id == participant_id) | (Participant.application_id == participant_id)
         )
         participant = (await self.session.execute(stmt)).scalars().first()

@@ -28,6 +28,8 @@ class ScanParticipantProfile(BaseModel):
     role: str
     organization_name: str | None = None
     badge_status: str | None = None
+    emergency_contact_name: str | None = None
+    emergency_contact_phone: str | None = None
 
 class ScanLogRead(BaseModel):
     id: uuid.UUID

@@ -150,6 +150,8 @@ class ScanService:
                 Application.last_name,
                 Application.photo_url,
                 Application.category,
+                Application.emergency_contact_name,
+                Application.emergency_contact_phone,
                 Participant.role,
                 Organization.name.label("organization_name"),
                 Badge.status.label("badge_status")
@@ -174,7 +176,9 @@ class ScanService:
             "category": row.category,
             "role": row.role,
             "organization_name": row.organization_name,
-            "badge_status": row.badge_status
+            "badge_status": row.badge_status,
+            "emergency_contact_name": row.emergency_contact_name,
+            "emergency_contact_phone": row.emergency_contact_phone
         }
 
     async def get_scan_logs(

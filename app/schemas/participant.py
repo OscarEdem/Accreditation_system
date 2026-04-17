@@ -3,6 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
+from app.schemas.application import ApplicationRead
 
 class ParticipantRole(str, Enum):
     # == Generic Roles (Mirrors ApplicationCategory) ==
@@ -36,13 +37,16 @@ class ParticipantRole(str, Enum):
     anti_doping_official = "Anti-Doping Official"
     
     # --- LOC Staff and Volunteers ---
-    technical_volunteers = "Technical Volunteers"
-    media_volunteers = "Media Volunteers"
-    protocol_volunteers = "Protocol Volunteers"
-    transport_volunteers = "Transport Volunteers"
-    medical_and_anti_doping_volunteers = "Medical and Anti-Doping Volunteers"
-    security_volunteers = "Security Volunteers"
-    accreditation_and_information_volunteers = "Accreditation and Information Volunteers"
+    technical_volunteer = "Technical Volunteer"
+    media_volunteer = "Media Volunteer"
+    protocol_volunteer = "Protocol Volunteer"
+    transport_volunteer = "Transport Volunteer"
+    medical_and_anti_doping_volunteer = "Medical and Anti-Doping Volunteer"
+    accreditation_and_information_volunteer = "Accreditation and Information Volunteer"
+    language_volunteer = "Language Volunteer"
+    team_attache_volunteer = "Team Attaché Volunteer"
+    accommodation_volunteer = "Accommodation Volunteer"
+    security_volunteer = "Security Volunteer"
     
     # --- Other Specific Roles ---
     transport_staff = "Transport Staff"
@@ -64,6 +68,7 @@ class ParticipantCreate(BaseModel):
 class ParticipantRead(ParticipantBase):
     id: uuid.UUID
     created_at: datetime
+    application: Optional[ApplicationRead] = None
     
     model_config = ConfigDict(from_attributes=True)
 

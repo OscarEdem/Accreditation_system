@@ -18,3 +18,4 @@ class Participant(BaseModel):
     # Reverse relationships to satisfy the back_populates in Organization and Category models
     organization = relationship("Organization", back_populates="participants")
     category = relationship("Category", back_populates="participants")
+    application = relationship("Application")

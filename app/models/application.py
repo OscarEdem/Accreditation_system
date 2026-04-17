@@ -15,6 +15,12 @@ class Application(BaseModel):
     first_name: Mapped[str] = mapped_column(String)
     last_name: Mapped[str] = mapped_column(String)
     email: Mapped[str] = mapped_column(String)
+    phone_number: Mapped[str | None] = mapped_column(String, nullable=True)
+    passport_number: Mapped[str | None] = mapped_column(String, nullable=True)
+    specific_role: Mapped[str | None] = mapped_column(String, nullable=True)
+    emergency_contact_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    emergency_contact_phone: Mapped[str | None] = mapped_column(String, nullable=True)
+    special_requirements: Mapped[str | None] = mapped_column(String, nullable=True)
     organization_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True)
     
     category: Mapped[str] = mapped_column(String)
