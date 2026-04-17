@@ -1,7 +1,7 @@
 # More robust mapping based on Organization Type instead of Name
 ORG_TYPE_ALLOWED_CATEGORIES = {
     "Country Team": ["Athlete", "Coaches", "Team Officials", "Medical Staff", "VIP/Guests"],
-    "LOC": ["LOC Staff", "Volunteer", "Security", "Transport", "VIP/Guests"],
+    "LOC": ["LOC Staff", "Volunteer", "Service Staff", "Security", "Transport", "VIP/Guests"],
     "Media": ["Media"],
     "Technical Official": ["Technical Officials"],
     "National Federation": ["Technical Officials", "VIP/Guests"],
