@@ -1,8 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, computed_field
-from app.core.constants import ORG_TYPE_ALLOWED_CATEGORIES
+from pydantic import BaseModel, ConfigDict
 
 class OrganizationBase(BaseModel):
     name: str
@@ -20,13 +19,9 @@ class OrganizationUpdate(BaseModel):
 class OrganizationRead(OrganizationBase):
     id: uuid.UUID
     created_at: datetime
+    allowed_categories: Optional[List[str]] = []
     
     model_config = ConfigDict(from_attributes=True)
-
-    @computed_field
-    @property
-    def allowed_categories(self) -> List[str]:
-        return ORG_TYPE_ALLOWED_CATEGORIES.get(self.type, [])
 
 class OrganizationListResponse(BaseModel):
     total: int

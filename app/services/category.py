@@ -6,7 +6,6 @@ from app.models.category import Category
 from app.schemas.category import CategoryCreate
 from app.models.user import User
 from app.models.organization import Organization
-from app.core.constants import ORG_TYPE_ALLOWED_CATEGORIES
 
 class CategoryService:
     def __init__(self, session: AsyncSession):
@@ -27,7 +26,7 @@ class CategoryService:
             if current_user.organization_id:
                 org = await self.session.get(Organization, current_user.organization_id)
                 if org:
-                    allowed_names = ORG_TYPE_ALLOWED_CATEGORIES.get(org.type, [])
+                    allowed_names = org.allowed_categories or []
                     if allowed_names:
                         stmt = stmt.where(Category.name.in_(allowed_names))
                     else:
