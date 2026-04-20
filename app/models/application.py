@@ -8,8 +8,8 @@ from app.db.base import BaseModel
 class Application(BaseModel):
     __tablename__ = "applications"
     
-    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    tournament_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tournaments.id"))
+    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    tournament_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tournaments.id"), index=True)
     
     # The actual participant's personal details
     first_name: Mapped[str] = mapped_column(String)
@@ -21,17 +21,17 @@ class Application(BaseModel):
     emergency_contact_name: Mapped[str | None] = mapped_column(String, nullable=True)
     emergency_contact_phone: Mapped[str | None] = mapped_column(String, nullable=True)
     special_requirements: Mapped[str | None] = mapped_column(String, nullable=True)
-    organization_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True)
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True, index=True)
     
-    category: Mapped[str] = mapped_column(String)
+    category: Mapped[str] = mapped_column(String, index=True)
     photo_url: Mapped[str | None] = mapped_column(String, nullable=True)
     dob: Mapped[date | None] = mapped_column(Date, nullable=True)
     gender: Mapped[str | None] = mapped_column(String, nullable=True)
     country: Mapped[str] = mapped_column(String, nullable=False)
     preferred_language: Mapped[str] = mapped_column(String(5), default='en', nullable=False)
     sporting_disciplines: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
-    status: Mapped[str] = mapped_column(String, default="pending")
-    submitted_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    status: Mapped[str] = mapped_column(String, default="pending", index=True)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)
     reviewer_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     reviewer_comments: Mapped[str | None] = mapped_column(String, nullable=True)
     is_gdpr_scrubbed: Mapped[bool] = mapped_column(Boolean, default=False)
