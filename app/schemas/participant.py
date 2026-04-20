@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict
 from app.schemas.application import ApplicationRead
 
 class ParticipantRole(str, Enum):
+     
     # == Generic Roles (Mirrors ApplicationCategory) ==
     # These are used as fallbacks when a specific role isn't assigned.
     athlete = "Athlete"
@@ -124,9 +125,10 @@ class ParticipantRole(str, Enum):
     mosr_technical_advisor = "MOSR Technical Advisor"
     mosr_director = "MOSR Director"
     mosr_staff = "MOSR Staff"
-    nsa_director = "NSA Director"
-    nsa_deputy_directors = "NSA Deputy Directors"
-    nsa_members = "NSA Members"
+    nsa_board_chairperson = "NSA Board Chairperson"
+    nsa_director = "NSA Director General"
+    nsa_deputy_directors = "NSA Deputy Director"
+    nsa_members = "NSA Board Member"
 
     # == 6. Service Staff ==
     access_control_officer = "Access Control Officer"
@@ -153,6 +155,7 @@ class ParticipantRole(str, Enum):
     artist = "Artist"
     event_crew = "Event Crew"
     performers = "Performers"
+    vendor = "Vendor"
 
     # == 7. Volunteers ==
     technical_competition_support_volunteer = "Technical and Competition Support Volunteer"

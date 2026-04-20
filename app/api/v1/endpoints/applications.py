@@ -23,6 +23,82 @@ allow_review_roles = RoleChecker(["admin", "officer"])
 def get_application_service(db: AsyncSession = Depends(get_db)) -> ApplicationService:
     return ApplicationService(db)
 
+ROLE_MAPPING = {
+        "Team Officials": [
+            "Chef de Mission (CDM)", "Team Manager", "Team Administrator", "Coach",
+            "Assistant Coach", "Team Doctor", "Physiotherapist", "Media Attaché",
+            "TIC Coordinator", "Team Support Staff"
+        ],
+        "Technical Officials": [
+            "Chief Judge", "Track Judge", "Race Walk Judge", "Jury", "Chief Referee",
+            "Referee", "Starter", "Recall Starter", "Photo Finish Referee",
+            "Wind Gauge Operator", "Technical Manager", "Field Judge – High Jump",
+            "Field Judge – Pole Vault", "Field Judge – Long/Triple Jump",
+            "Field Judge – Throwing Events", "Doping Control Officer",
+            "Anti-Doping Chaperone", "Medical Officer", "Timekeeper",
+            "Records & Results Officer", "Technical Information Officer",
+            "Competition Secretary", "Event Coordinator"
+        ],
+        "LOC Staff": [
+            "LOC Chairperson", "LOC Member", "Director General", "Event Director",
+            "Event Coordinator", "Operations Manager", "Competition Director",
+            "Competition Coordinator", "Venue Manager", "Finance Officer",
+            "Legal Officer", "Marketing & Communications Officer", "Logistics Officer",
+            "Administrative Officer", "Accreditation Officer", "Protocol Officer",
+            "Transport Coordinator", "Volunteer Coordinator", "Broadcast Coordinator",
+            "IT/Technology Officer", "Security Coordinator", "Medical Coordinator"
+        ],
+        "Media": [
+            "Director/Producer", "Editor", "Rights Holder Media", "Production Crew",
+            "Technical Broadcast Staff", "Broadcast Journalist – Television",
+            "Broadcast Journalist – Radio", "Print/Online Reporter",
+            "New Agency Correspondence", "Photographer", "Videographer/Camera Operator",
+            "Sound Engineer", "Commentator/Analyst", "Social Media/Digital Reporter"
+        ],
+        "VIP/Guests": [
+            "Head of State", "Government Official", "Ambassador/Diplomat",
+            "World Athletics President", "World Athletics Senior Vice President",
+            "World Athletics Vice President", "World Athletics Council Member",
+            "World Athletics Family Member", "CAA President", "CAA CEO",
+            "CAA Council Member", "National Athletics Federation President",
+            "National Athletics Federation Vice President", "National Athletics Federation CEO",
+            "National Athletics Federation Member", "NOC President", "NOC Secretary General",
+            "NOC Member", "Guest of Honor", "Invited Guest", "International Observer",
+            "MOSR Chief Director", "MOSR Technical Advisor", "MOSR Director", "MOSR Staff",
+            "NSA Board Chairperson", "NSA Director General", "NSA Deputy Director", "NSA Board Member"
+        ],
+        "Service Staff": [
+            "Access Control Officer", "Security Supervisor", "Security Officer",
+            "Doctor", "Nurse/Medical Officer", "Physiotherapist", "Paramedics/First Aider",
+            "Anti-Doping Officer", "Anti-Doping Chaperone", "Fleet Supervisor",
+            "Driver/Chauffeur", "Catering Supervisor", "Catering Staff",
+            "Facilities Supervisor", "Facilities/Cleaning Staff", "Electrician/Technician",
+            "IT Support Technician", "IT Support Staff", "Equipment/Logistics Handler",
+            "Event Manager", "Ceremonies", "Artist", "Event Crew", "Performers", "Vendor"
+        ],
+        "Volunteer": [
+            "Technical and Competition Support Volunteer", "Media and Communications Volunteer",
+            "Protocol and VIP Volunteer", "Transport Volunteer", "Medical and Anti-Doping Volunteer",
+            "Accreditation and Information Volunteer", "Language Volunteer",
+            "Team Attaché Volunteer", "Accommodation Volunteer", "Events and Ceremonies Volunteer"
+        ],
+        # Generic fallbacks for categories that don't have sub-roles defined
+        "Athlete": ["Athlete"],
+        "Coaches": ["Coach", "Assistant Coach"],
+        "Medical Staff": ["Medical Staff"],
+        "Security": ["Security"],
+        "Transport": ["Transport"]
+    }
+
+@router.get("/options/roles", status_code=200, summary="Get Specific Roles Mapping")
+async def get_role_options():
+    """
+    Returns a JSON mapping of Categories to their specific available Roles.
+    The frontend uses this to dynamically populate the 'Specific Role' dropdown 
+    based on the applicant's selected Category in the form wizard.
+    """
+    return ROLE_MAPPING
+
 @router.post("/public", response_model=ApplicationRead, status_code=201, summary="Submit Public Application")
 async def submit_public_application(
     application_in: ApplicationCreate,
@@ -50,6 +126,12 @@ async def submit_public_application(
     category_exists = await db.scalar(select(Category).where(Category.name == application_in.category.value))
     if not category_exists:
         raise HTTPException(status_code=400, detail=f"Category '{application_in.category.value}' does not exist in the system.")
+
+    # 🔒 Strict Validation: Ensure the specific_role matches the category
+    if application_in.specific_role:
+        allowed_roles = ROLE_MAPPING.get(application_in.category.value, [])
+        if application_in.specific_role not in allowed_roles:
+            raise HTTPException(status_code=400, detail=f"Role '{application_in.specific_role}' is not valid for category '{application_in.category.value}'.")
 
     if not application_in.tournament_id:
         active_tourn = await db.scalar(select(Tournament).where(Tournament.is_active == True).order_by(Tournament.created_at.desc()).limit(1))
@@ -115,6 +197,12 @@ async def create_applications_batch(
         if app_in.category.value not in valid_categories:
             raise HTTPException(status_code=400, detail=f"Category '{app_in.category.value}' does not exist in the system.")
             
+        # 🔒 Strict Validation: Ensure the specific_role matches the category
+        if app_in.specific_role:
+            allowed_roles = ROLE_MAPPING.get(app_in.category.value, [])
+            if app_in.specific_role not in allowed_roles:
+                raise HTTPException(status_code=400, detail=f"Role '{app_in.specific_role}' is not valid for category '{app_in.category.value}'.")
+
         if not app_in.tournament_id:
             if not default_tourn:
                 raise HTTPException(status_code=400, detail="No active tournament found in the system.")
@@ -160,6 +248,12 @@ async def create_application(
     category_exists = await db.scalar(select(Category).where(Category.name == application_in.category.value))
     if not category_exists:
         raise HTTPException(status_code=400, detail=f"Category '{application_in.category.value}' does not exist in the system.")
+
+    # 🔒 Strict Validation: Ensure the specific_role matches the category
+    if application_in.specific_role:
+        allowed_roles = ROLE_MAPPING.get(application_in.category.value, [])
+        if application_in.specific_role not in allowed_roles:
+            raise HTTPException(status_code=400, detail=f"Role '{application_in.specific_role}' is not valid for category '{application_in.category.value}'.")
 
     if not application_in.tournament_id:
         active_tourn = await db.scalar(select(Tournament).where(Tournament.is_active == True).order_by(Tournament.created_at.desc()).limit(1))
