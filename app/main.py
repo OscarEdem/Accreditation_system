@@ -121,6 +121,7 @@ PREFIX_PUBLIC_PATHS = [
     "/api/v1/auth/accept-invite", "/api/v1/auth/resend-invite",
     "/api/v1/public/stats", "/api/v1/applications/public", 
     "/api/v1/applications/track/status",
+    "/api/v1/applications/options/roles",
     "/api/v1/webhooks/sendgrid"
 ]
 
