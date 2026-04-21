@@ -6,21 +6,23 @@ from sqlalchemy import select
 from app.db.session import get_db
 from app.schemas.participant import ParticipantRead, ParticipantListResponse
 from app.services.participant import ParticipantService
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, RoleChecker
 from app.models.user import User
 from app.models.application import Application
 
 router = APIRouter()
+
+allow_read_participants = RoleChecker(["admin", "loc_admin", "officer", "org_admin", "applicant"])
 
 def get_participant_service(db: AsyncSession = Depends(get_db)) -> ParticipantService:
     return ParticipantService(db)
 
 @router.get("/", response_model=ParticipantListResponse, summary="List Participants (Paginated)")
 async def get_participants(
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(allow_read_participants)],
     service: ParticipantService = Depends(get_participant_service),
     page: int = Query(1, ge=1, description="Page number"),
-    limit: int = Query(10, ge=1, le=100, description="Items per page"),
+    limit: int = Query(10, ge=1, le=500, description="Items per page"),
     tournament_id: uuid.UUID | None = Query(None, description="Filter by tournament ID"),
     role: str | None = Query(None, description="Filter by role")
 ):
@@ -53,17 +55,15 @@ async def get_participants(
 @router.get("/{participant_id}", response_model=ParticipantRead)
 async def get_participant(
     participant_id: uuid.UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(allow_read_participants)],
     service: ParticipantService = Depends(get_participant_service),
     db: AsyncSession = Depends(get_db)
 ):
     participant = await service.get_participant_by_id(participant_id)
     
     # SECURITY: Prevent IDOR. Enforce strict ownership boundaries.
-    if str(current_user.role) == "applicant":
-        app_user_id = await db.scalar(select(Application.user_id).where(Application.id == participant.application_id))
-        if app_user_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Not authorized to view this participant.")
+    if str(current_user.role) == "applicant" and participant.application.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to view this participant.")
             
     if str(current_user.role) == "org_admin" and participant.organization_id != current_user.organization_id:
         raise HTTPException(status_code=403, detail="Not authorized to view this participant.")

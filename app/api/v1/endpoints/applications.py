@@ -11,7 +11,7 @@ from app.db.redis import get_redis
 from app.schemas.application import ApplicationCreate, ApplicationRead, ApplicationReview, ApplicationBatchReview, ApplicationReadWithSubmitter, ApplicationListResponse, ApplicationTrackResponse
 from app.schemas.document import DocumentReview, DocumentRead
 from app.services.application import ApplicationService
-from app.api.deps import get_current_user, RoleChecker
+from app.api.deps import get_current_user, RoleChecker, RateLimiter
 from app.models.user import User
 from app.workers.main import send_email_notification
 from app.models.category import Category
@@ -103,13 +103,11 @@ async def get_role_options():
     """
     return ROLE_MAPPING
 
-@router.post("/public", response_model=ApplicationRead, status_code=201, summary="Submit Public Application")
+@router.post("/public", response_model=ApplicationRead, status_code=201, summary="Submit Public Application", dependencies=[Depends(RateLimiter(requests=5, window=600))])
 async def submit_public_application(
-    request: Request,
     application_in: ApplicationCreate,
     service: ApplicationService = Depends(get_application_service),
-    db: AsyncSession = Depends(get_db),
-    redis: Redis = Depends(get_redis)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Public endpoint for applicants to submit their application without needing a JWT token.
@@ -129,15 +127,6 @@ async def submit_public_application(
     }
     ```
     """
-    # Rate Limiting: Max 5 submissions per 10 minutes per IP address
-    client_ip = request.client.host if request.client else "unknown"
-    rate_limit_key = f"rate_limit:app_public:{client_ip}"
-    requests_made = await redis.incr(rate_limit_key)
-    if requests_made == 1:
-        await redis.expire(rate_limit_key, 600)  # 10-minute window
-        
-    if requests_made > 5:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many public applications submitted from this IP. Please wait 10 minutes.")
 
     category_exists = await db.scalar(select(Category).where(Category.name == application_in.category.value))
     if not category_exists:
@@ -180,13 +169,12 @@ async def submit_public_application(
     
     return application
 
-@router.post("/batch", response_model=List[ApplicationRead], status_code=201, summary="Submit Multiple Applications")
+@router.post("/batch", response_model=List[ApplicationRead], status_code=201, summary="Submit Multiple Applications", dependencies=[Depends(RateLimiter(requests=5, window=60))])
 async def create_applications_batch(
     applications_in: List[ApplicationCreate],
     current_user: Annotated[User, Depends(get_current_user)],
     service: ApplicationService = Depends(get_application_service),
-    db: AsyncSession = Depends(get_db),
-    redis: Redis = Depends(get_redis)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Endpoint for privileged users (like `org_admin`) to submit multiple applications simultaneously.
@@ -195,14 +183,6 @@ async def create_applications_batch(
     - Pass an array `[]` of application objects in the JSON body.
     - Org Admins bypass duplicate checks, meaning they can submit multiple applications under their own account for their team members.
     """
-    # Rate Limiting: Max 5 batch submissions per minute per user
-    rate_limit_key = f"rate_limit:app_batch:{current_user.id}"
-    requests_made = await redis.incr(rate_limit_key)
-    if requests_made == 1:
-        await redis.expire(rate_limit_key, 60)  # 60-second window
-        
-    if requests_made > 5:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many batch submissions. Please wait a minute.")
 
     if current_user.role not in ["admin", "loc_admin", "officer", "org_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized to submit batch applications.")
@@ -260,22 +240,13 @@ async def create_applications_batch(
         
     return applications
 
-@router.post("/", response_model=ApplicationRead, status_code=201)
+@router.post("/", response_model=ApplicationRead, status_code=201, dependencies=[Depends(RateLimiter(requests=20, window=60))])
 async def create_application(
     application_in: ApplicationCreate,
     current_user: Annotated[User, Depends(get_current_user)],
     service: ApplicationService = Depends(get_application_service),
-    db: AsyncSession = Depends(get_db),
-    redis: Redis = Depends(get_redis)
+    db: AsyncSession = Depends(get_db)
 ):
-    # Rate Limiting: Max 20 single submissions per minute per user
-    rate_limit_key = f"rate_limit:app_single:{current_user.id}"
-    requests_made = await redis.incr(rate_limit_key)
-    if requests_made == 1:
-        await redis.expire(rate_limit_key, 60)  # 60-second window
-        
-    if requests_made > 20:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many applications submitted. Please wait a minute.")
 
     # Force the application to belong to the user's organization if they are not system staff
     if current_user.role in ["org_admin", "applicant"]:
@@ -395,7 +366,7 @@ async def get_applications(
     current_user: Annotated[User, Depends(get_current_user)],
     service: ApplicationService = Depends(get_application_service),
     page: int = Query(1, ge=1, description="Page number"),
-    limit: int = Query(10, ge=1, le=100, description="Items per page"),
+    limit: int = Query(10, ge=1, le=500, description="Items per page"),
     status: str | None = Query(None, description="Filter by status (e.g., pending, approved)"),
     category: str | None = Query(None, description="Filter by category"),
     organization_id: uuid.UUID | None = Query(None, description="Filter by organization ID"),

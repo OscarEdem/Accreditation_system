@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from enum import Enum
 from typing import Optional, List, Literal
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, HttpUrl
 from app.schemas.document import DocumentCreate, DocumentRead
 
 class GenderEnum(str, Enum):
@@ -44,7 +44,7 @@ class ApplicationBase(BaseModel):
     special_requirements: Optional[str] = None
     organization_id: Optional[uuid.UUID] = None
     category: ApplicationCategory
-    photo_url: Optional[str] = None
+    photo_url: Optional[HttpUrl] = None
     dob: Optional[date] = None
     gender: Optional[GenderEnum] = None
     country: str
@@ -57,6 +57,24 @@ class ApplicationBase(BaseModel):
         if any(char.isdigit() for char in v):
             raise ValueError("Names cannot contain numbers.")
         return v
+        
+    @field_validator('photo_url')
+    @classmethod
+    def validate_photo_url(cls, v: str | None) -> str | None:
+        if not v:
+            return v
+        from urllib.parse import urlparse
+        from app.config.settings import settings
+        parsed = urlparse(str(v))
+        if parsed.scheme != "https":
+            raise ValueError("Photo URL must use HTTPS protocol")
+        allowed_domains = [
+            f"{settings.S3_BUCKET_NAME}.s3.amazonaws.com",
+            f"{settings.S3_BUCKET_NAME}.s3.{settings.AWS_REGION}.amazonaws.com"
+        ]
+        if parsed.netloc not in allowed_domains:
+            raise ValueError("Photo must be hosted on your approved S3 bucket")
+        return str(v)
 
 class ApplicationCreate(ApplicationBase):
     documents: List[DocumentCreate] = []

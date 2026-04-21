@@ -14,6 +14,7 @@ class ScanRequest(BaseModel):
     serial_number: str
     signature: str
     direction: ScanDirection
+    issued_at: int | None = None
 
 class ScanResponse(BaseModel):
     access: str

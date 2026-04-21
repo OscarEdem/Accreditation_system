@@ -10,7 +10,7 @@ from sqlalchemy import select
 from redis.asyncio import Redis
 from app.db.session import get_db
 from app.db.redis import get_redis
-from app.api.deps import get_current_user, RoleChecker
+from app.api.deps import get_current_user, RoleChecker, RateLimiter
 from app.models.user import User
 from app.schemas.scan import ScanRequest, ScanResponse, ScanParticipantProfile, ScanLogListResponse
 from app.services.scan import ScanService
@@ -28,12 +28,11 @@ def get_scan_service(
 ) -> ScanService:
     return ScanService(db, redis)
 
-@router.post("/", response_model=ScanResponse, status_code=200, summary="Process Physical QR Scan")
+@router.post("/", response_model=ScanResponse, status_code=200, summary="Process Physical QR Scan", dependencies=[Depends(RateLimiter(requests=10, window=10))])
 async def scan_participant(
     request: ScanRequest,
     current_user: Annotated[User, Depends(allow_scan_roles)],
-    service: ScanService = Depends(get_scan_service),
-    redis: Redis = Depends(get_redis)
+    service: ScanService = Depends(get_scan_service)
 ):
     """
     The core endpoint hit by physical mobile scanners at the venue gates.
@@ -45,15 +44,6 @@ async def scan_participant(
     - Checks if the participant's category has access to the requested `zone_id`.
     - Logs the interaction to `ScanLog` permanently.
     """
-    # Rate Limiting: Max 10 scans per 10 seconds per scanner device
-    rate_limit_key = f"rate_limit:scan:user:{current_user.id}"
-    
-    requests_made = await redis.incr(rate_limit_key)
-    if requests_made == 1:
-        await redis.expire(rate_limit_key, 10)  # 10-second window
-        
-    if requests_made > 10:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many scans. Please slow down.")
 
     return await service.process_scan(
         participant_id=request.participant_id,
@@ -61,19 +51,26 @@ async def scan_participant(
         serial_number=request.serial_number,
         signature=request.signature,
         scanner_id=current_user.id,
-        direction=request.direction
+        direction=request.direction,
+        issued_at=request.issued_at
     )
 
 @router.get("/participant/{participant_id}", response_model=ScanParticipantProfile, status_code=200, summary="Get Scanned Profile Details")
 async def get_participant_profile(
     participant_id: uuid.UUID,
+    serial_number: str,
+    signature: str,
     current_user: Annotated[User, Depends(allow_read_scan_roles)],
-    service: ScanService = Depends(get_scan_service)
+    service: ScanService = Depends(get_scan_service),
+    issued_at: int | None = None
 ):
     """
-    Used by the physical scanner app. If a scan is successful, the app calls this endpoint 
-    to download the participant's photo and name to display on the guard's screen to verify identity.
+    Used by the physical scanner app. Requires cryptographic proof (signature) 
+    to prevent unauthorized scraping of participant profiles (IDOR protection).
     """
+    if not service.verify_qr_signature(str(participant_id), serial_number, signature, issued_at):
+        raise HTTPException(status_code=403, detail="Invalid QR signature. Cryptographic proof required.")
+        
     profile = await service.get_participant_profile(participant_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Participant not found")
@@ -84,7 +81,7 @@ async def get_scan_logs(
     current_user: Annotated[User, Depends(allow_read_scan_roles)],
     service: ScanService = Depends(get_scan_service),
     page: int = Query(1, ge=1, description="Page number"),
-    limit: int = Query(20, ge=1, le=100, description="Items per page"),
+    limit: int = Query(20, ge=1, le=500, description="Items per page"),
     zone_id: uuid.UUID | None = Query(None, description="Filter by zone ID"),
     participant_id: uuid.UUID | None = Query(None, description="Filter by participant ID"),
     start_date: datetime | None = Query(None, description="Filter from this start date (ISO 8601)"),

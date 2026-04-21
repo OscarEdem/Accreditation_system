@@ -16,7 +16,7 @@ from app.services.user import UserService
 from app.services.token_blacklist import TokenBlacklistService
 from app.core.security import create_access_token
 from app.config.settings import settings
-from app.api.deps import get_current_user, RoleChecker
+from app.api.deps import get_current_user, RoleChecker, RateLimiter
 from app.models.user import User
 from app.models.organization import Organization
 from app.models.category import Category
@@ -48,7 +48,7 @@ async def register_user(user_in: UserCreate, service: UserService = Depends(get_
     """
     return await service.create_user(user_in)
 
-@router.post("/login", response_model=Token, summary="Login & Get Access Token")
+@router.post("/login", response_model=Token, summary="Login & Get Access Token", dependencies=[Depends(RateLimiter(requests=5, window=300))])
 async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     service: UserService = Depends(get_user_service),
@@ -70,13 +70,6 @@ async def login_for_access_token(
     fetch('/api/v1/auth/login', { method: 'POST', body: params });
     ```
     """
-    # Brute Force Protection: Max 5 attempts per 5 minutes per email
-    rate_limit_key = f"rate_limit:login:{form_data.username}"
-    attempts = await redis.incr(rate_limit_key)
-    if attempts == 1:
-        await redis.expire(rate_limit_key, 300)  # 5-minute lockout window
-    if attempts > 5:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many failed login attempts. Please try again in 5 minutes.")
 
     user = await service.authenticate_user(form_data.username, form_data.password)
     if not user:
@@ -86,9 +79,6 @@ async def login_for_access_token(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-        
-    # Clear the rate limit on successful login
-    await redis.delete(rate_limit_key)
         
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is deactivated.")
@@ -198,19 +188,11 @@ async def force_logout_user(
     
     return {"message": f"User session for {user_id} has been forcefully terminated."}
 
-@router.post("/forgot-password")
+@router.post("/forgot-password", dependencies=[Depends(RateLimiter(requests=3, window=60))])
 async def forgot_password(
     request: ForgotPasswordRequest, 
-    service: UserService = Depends(get_user_service),
-    redis: Redis = Depends(get_redis)
+    service: UserService = Depends(get_user_service)
 ):
-    # Rate Limiting: Max 3 requests per minute per email
-    rate_limit_key = f"rate_limit:forgot_pwd:{request.email}"
-    requests_made = await redis.incr(rate_limit_key)
-    if requests_made == 1:
-        await redis.expire(rate_limit_key, 60)  # 60-second window
-    if requests_made > 3:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many requests. Please wait a minute.")
 
     user = await service.get_user_by_email(request.email)
     if user:
@@ -392,19 +374,11 @@ async def accept_invite(
     
     return {"message": "Password successfully set. You can now log in."}
 
-@router.post("/resend-invite")
+@router.post("/resend-invite", dependencies=[Depends(RateLimiter(requests=3, window=60))])
 async def resend_invite(
     request: ResendInviteRequest, 
-    service: UserService = Depends(get_user_service),
-    redis: Redis = Depends(get_redis)
+    service: UserService = Depends(get_user_service)
 ):
-    # Rate Limiting: Max 3 requests per minute per email
-    rate_limit_key = f"rate_limit:resend_invite:{request.email}"
-    requests_made = await redis.incr(rate_limit_key)
-    if requests_made == 1:
-        await redis.expire(rate_limit_key, 60)  # 60-second window
-    if requests_made > 3:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many requests. Please wait a minute.")
 
     user = await service.get_user_by_email(request.email)
     if user:

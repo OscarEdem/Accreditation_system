@@ -3,9 +3,12 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Literal
 import re
-from pydantic import BaseModel, EmailStr, ConfigDict, field_validator, ValidationInfo
+from pydantic import BaseModel, EmailStr, ConfigDict, field_validator, ValidationInfo, AfterValidator
+from typing import Annotated
 from app.schemas.category import CategoryRead
 from app.schemas.validators import validate_password_strength, validate_name
+
+StrongPassword = Annotated[str, AfterValidator(validate_password_strength)]
 
 class UserRole(str, Enum):
     applicant = "applicant"
@@ -35,12 +38,7 @@ class UserBase(BaseModel):
         return validate_name(v, "Last name")
 
 class UserCreate(UserBase):
-    password: str
-    
-    @field_validator('password')
-    @classmethod
-    def validate_password(cls, v: str) -> str:
-        return validate_password_strength(v)
+    password: StrongPassword
 
 class UserRead(UserBase):
     id: uuid.UUID
@@ -71,12 +69,7 @@ class ForgotPasswordRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     token: str
-    new_password: str
-
-    @field_validator('new_password')
-    @classmethod
-    def validate_password(cls, v: str) -> str:
-        return validate_password_strength(v)
+    new_password: StrongPassword
 
 class UserInvite(UserBase):
     # Inherits all fields from UserBase and its validators.
@@ -85,12 +78,7 @@ class UserInvite(UserBase):
 
 class AcceptInviteRequest(BaseModel):
     token: str
-    new_password: str
-
-    @field_validator('new_password')
-    @classmethod
-    def validate_password(cls, v: str) -> str:
-        return validate_password_strength(v)
+    new_password: StrongPassword
 
 class ResendInviteRequest(BaseModel):
     email: EmailStr

@@ -9,11 +9,12 @@ from app.db.session import get_db
 from app.db.redis import get_redis
 from app.schemas.badge import BadgeUpdate, BadgeRead
 from app.services.badge import BadgeService
-from app.api.deps import get_current_user, RoleChecker
+from app.api.deps import get_current_user, RoleChecker, RateLimiter
 from app.models.user import User
 from app.models.participant import Participant
 from app.models.application import Application
 from app.models.badge import Badge
+from app.models.audit_log import AuditLog
 from app.workers.main import send_email_notification
 from app.config.settings import settings
 
@@ -25,26 +26,17 @@ allow_badge_revoke_roles = RoleChecker(["admin", "officer"])
 class BatchBadgeRequest(BaseModel):
     participant_ids: List[uuid.UUID]
 
-@router.post("/{reference_id}", status_code=201, summary="Generate Badge (Single)")
+@router.post("/{reference_id}", status_code=201, summary="Generate Badge (Single)", dependencies=[Depends(RateLimiter(requests=30, window=60))])
 async def generate_badge(
     reference_id: uuid.UUID,
     current_user: Annotated[User, Depends(allow_badge_generate_roles)],
-    db: AsyncSession = Depends(get_db),
-    redis: Redis = Depends(get_redis)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Generates the cryptographic signature, QR code, and assigns a Serial Number to an approved participant.
     (Note: `reference_id` can be either the Participant ID or the original Application ID).
     Automatically triggers an email to the user with a download link.
     """
-    # Rate Limiting: Max 30 single badge generations per minute per user
-    rate_limit_key = f"rate_limit:badge_single:{current_user.id}"
-    requests_made = await redis.incr(rate_limit_key)
-    if requests_made == 1:
-        await redis.expire(rate_limit_key, 60)  # 60-second window
-        
-    if requests_made > 30:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many badge generations. Please wait a minute.")
 
     # Resolve ID: Frontend might pass an Application ID instead of a Participant ID
     stmt = select(Participant).where((Participant.id == reference_id) | (Participant.application_id == reference_id))
@@ -91,25 +83,16 @@ async def generate_badge(
         "qr_image_base64": f"data:image/png;base64,{qr_base64}"
     }
 
-@router.post("/batch/generate", status_code=201, summary="Generate Badges (Bulk)")
+@router.post("/batch/generate", status_code=201, summary="Generate Badges (Bulk)", dependencies=[Depends(RateLimiter(requests=10, window=60))])
 async def generate_badges_batch(
     request: BatchBadgeRequest,
     current_user: Annotated[User, Depends(allow_badge_generate_roles)],
-    db: AsyncSession = Depends(get_db),
-    redis: Redis = Depends(get_redis)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Generates badges for an array of participant/application IDs.
     Useful when an Admin highlights multiple rows in the data table and clicks "Generate Badges".
     """
-    # Rate Limiting: Max 10 bulk generations per minute per user
-    rate_limit_key = f"rate_limit:badge_batch:{current_user.id}"
-    requests_made = await redis.incr(rate_limit_key)
-    if requests_made == 1:
-        await redis.expire(rate_limit_key, 60)  # 60-second window
-        
-    if requests_made > 10:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many batch badge generations. Please wait a minute.")
 
     # Resolve all IDs (handles both Participant IDs and Application IDs)
     stmt = select(Participant).where(
@@ -177,6 +160,11 @@ async def update_badge_status(
         # 🔒 ZERO-TRUST: O(1) participant cache invalidation
         if update_in.status.lower() == "revoked":
             await redis.incr(f"participant_version:{badge.participant_id}")
+            
+        audit = AuditLog(entity_type="badge", entity_id=badge_id, action="badge_status_change", new_value=update_in.status.value, user_id=current_user.id)
+        db.add(audit)
+        await db.commit()
+        
         return badge
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

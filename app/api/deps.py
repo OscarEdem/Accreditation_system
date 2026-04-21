@@ -1,5 +1,5 @@
 from typing import Annotated
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -100,3 +100,38 @@ class RoleChecker:
                 detail="Operation not permitted"
             )
         return user
+
+
+class RateLimiter:
+    """
+    Generic rate limiting dependency.
+    Usage: @router.post("/endpoint", dependencies=[Depends(RateLimiter(requests=5, window=60))])
+    """
+    def __init__(self, requests: int, window: int):
+        self.requests = requests
+        self.window = window
+
+    async def __call__(self, request: Request, redis: Redis = Depends(get_redis)):
+        identifier = request.client.host if request.client else "unknown"
+        
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            try:
+                token = auth_header.split(" ")[1]
+                payload = jwt.decode(token, options={"verify_signature": False})
+                if payload.get("user_id"):
+                    identifier = f"user:{payload.get('user_id')}"
+            except Exception:
+                pass
+
+        rate_limit_key = f"rate_limit:{request.url.path}:{identifier}"
+        
+        requests_made = await redis.incr(rate_limit_key)
+        if requests_made == 1:
+            await redis.expire(rate_limit_key, self.window)
+            
+        if requests_made > self.requests:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many requests. Please try again later."
+            )

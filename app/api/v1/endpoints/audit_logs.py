@@ -19,7 +19,7 @@ async def get_audit_logs(
     current_user: Annotated[User, Depends(allow_super_admin)],
     service: AuditLogService = Depends(get_audit_log_service),
     page: int = Query(1, ge=1, description="Page number"),
-    limit: int = Query(20, ge=1, le=100, description="Items per page")
+    limit: int = Query(20, ge=1, le=500, description="Items per page")
 ):
     skip = (page - 1) * limit
     items, total = await service.get_audit_logs(skip=skip, limit=limit)

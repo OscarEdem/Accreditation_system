@@ -24,9 +24,12 @@ class ScanService:
         self.session = session
         self.redis = redis
 
-    def verify_qr_signature(self, participant_id: str, serial_number: str, signature: str) -> bool:
+    def verify_qr_signature(self, participant_id: str, serial_number: str, signature: str, issued_at: int | None = None) -> bool:
         """Verifies the HMAC SHA-256 signature from the QR code."""
-        message = f"{participant_id}:{serial_number}".encode("utf-8")
+        if issued_at is not None:
+            message = f"{participant_id}:{serial_number}:{issued_at}".encode("utf-8")
+        else:
+            message = f"{participant_id}:{serial_number}".encode("utf-8")
         secret = settings.SECRET_KEY.encode("utf-8")
         expected_signature = hmac.new(secret, message, hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected_signature, signature)
@@ -57,9 +60,9 @@ class ScanService:
             }
             await self.redis.publish("scan_alerts", json.dumps(alert))
 
-    async def process_scan(self, participant_id: uuid.UUID, zone_id: uuid.UUID, serial_number: str, signature: str, scanner_id: uuid.UUID, direction: str) -> dict:
+    async def process_scan(self, participant_id: uuid.UUID, zone_id: uuid.UUID, serial_number: str, signature: str, scanner_id: uuid.UUID, direction: str, issued_at: int | None = None) -> dict:
         # 0. Verify Cryptographic Signature (Zero-Trust Check)
-        if not self.verify_qr_signature(str(participant_id), serial_number, signature):
+        if not self.verify_qr_signature(str(participant_id), serial_number, signature, issued_at):
             logger.warning(f"FORGERY ATTEMPT: Invalid signature for participant {participant_id}")
             await self._log_scan(None, zone_id, scanner_id, False, "Invalid or forged QR code signature", direction)
             return {"access": "DENIED", "reason": "Invalid or forged QR code", "role": None}

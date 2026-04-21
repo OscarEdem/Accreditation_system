@@ -5,6 +5,7 @@ import uuid
 import base64
 import qrcode
 from io import BytesIO
+from datetime import timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from redis.asyncio import Redis
@@ -16,26 +17,30 @@ class BadgeService:
         self.session = session
         self.redis = redis
 
-    def generate_signature(self, participant_id: str, serial_number: str) -> str:
+    def generate_signature(self, participant_id: str, serial_number: str, issued_at: int | None = None) -> str:
         """Generates an HMAC SHA-256 signature for the badge data."""
-        message = f"{participant_id}:{serial_number}".encode("utf-8")
+        if issued_at is not None:
+            message = f"{participant_id}:{serial_number}:{issued_at}".encode("utf-8")
+        else:
+            message = f"{participant_id}:{serial_number}".encode("utf-8")
         secret = settings.SECRET_KEY.encode("utf-8")
         return hmac.new(secret, message, hashlib.sha256).hexdigest()
 
     async def create_badge(self, participant_id: uuid.UUID) -> Badge:
         """Creates a new badge for a participant with an HMAC signature."""
         serial_number = f"ACCRA-{uuid.uuid4().hex[:8].upper()}"
-        signature = self.generate_signature(str(participant_id), serial_number)
 
         badge = Badge(
             participant_id=participant_id,
             serial_number=serial_number,
-            qr_hmac=signature,
             status="active"
         )
         
         try:
             self.session.add(badge)
+            await self.session.flush()
+            issued_at = int(badge.created_at.replace(tzinfo=timezone.utc).timestamp())
+            badge.qr_hmac = self.generate_signature(str(participant_id), serial_number, issued_at)
             await self.session.commit()
             await self.session.refresh(badge)
             return badge
@@ -48,15 +53,17 @@ class BadgeService:
         badges = []
         for pid in participant_ids:
             serial_number = f"ACCRA-{uuid.uuid4().hex[:8].upper()}"
-            signature = self.generate_signature(str(pid), serial_number)
             badges.append(Badge(
                 participant_id=pid,
                 serial_number=serial_number,
-                qr_hmac=signature,
                 status="active"
             ))
         try:
             self.session.add_all(badges)
+            await self.session.flush()
+            for b in badges:
+                issued_at = int(b.created_at.replace(tzinfo=timezone.utc).timestamp())
+                b.qr_hmac = self.generate_signature(str(b.participant_id), b.serial_number, issued_at)
             await self.session.commit()
             for b in badges:
                 await self.session.refresh(b)
@@ -84,9 +91,11 @@ class BadgeService:
 
     def generate_qr_code(self, badge: Badge) -> str:
         """Generates a base64 encoded PNG of the QR code."""
+        issued_at = int(badge.created_at.replace(tzinfo=timezone.utc).timestamp())
         qr_data = json.dumps({
             "participant_id": str(badge.participant_id),
             "serial_number": badge.serial_number,
+            "issued_at": issued_at,
             "signature": badge.qr_hmac
         })
 

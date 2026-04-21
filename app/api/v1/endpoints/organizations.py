@@ -7,6 +7,7 @@ from app.schemas.organization import OrganizationCreate, OrganizationRead, Organ
 from app.services.organization import OrganizationService
 from app.api.deps import get_current_user, RoleChecker
 from app.models.user import User
+from app.models.audit_log import AuditLog
 
 router = APIRouter()
 
@@ -19,6 +20,7 @@ def get_organization_service(db: AsyncSession = Depends(get_db)) -> Organization
 async def create_organization(
     current_user: Annotated[User, Depends(allow_admin)],
     service: OrganizationService = Depends(get_organization_service),
+    db: AsyncSession = Depends(get_db),
     name: str = Form(...),
     type: str = Form(...),
     country: str | None = Form(None),
@@ -26,13 +28,17 @@ async def create_organization(
 ):
     """Admin endpoint to register a new organization/team in the system."""
     org_in = OrganizationCreate(name=name, type=type, country=country, allowed_categories=allowed_categories)
-    return await service.create_organization(org_in)
+    org = await service.create_organization(org_in)
+    audit = AuditLog(entity_type="organization", entity_id=org.id, action="organization_created", user_id=current_user.id)
+    db.add(audit)
+    await db.commit()
+    return org
 
 @router.get("/", response_model=OrganizationListResponse, summary="List Organizations (Paginated)")
 async def get_organizations(
     service: OrganizationService = Depends(get_organization_service),
     page: int = Query(1, ge=1, description="Page number"),
-    limit: int = Query(10, ge=1, le=100, description="Items per page"),
+    limit: int = Query(10, ge=1, le=500, description="Items per page"),
     search: str | None = Query(None, description="Search by organization name"),
     type: str | None = Query(None, description="Filter by organization type")
 ):
@@ -60,10 +66,15 @@ async def update_organization(
     org_id: uuid.UUID,
     update_in: OrganizationUpdate,
     current_user: Annotated[User, Depends(allow_admin)],
-    service: OrganizationService = Depends(get_organization_service)
+    service: OrganizationService = Depends(get_organization_service),
+    db: AsyncSession = Depends(get_db)
 ):
     """Update an organization's details (e.g., fixing a typo in the team name)."""
-    return await service.update_organization(org_id, update_in)
+    org = await service.update_organization(org_id, update_in)
+    audit = AuditLog(entity_type="organization", entity_id=org_id, action="organization_updated", user_id=current_user.id)
+    db.add(audit)
+    await db.commit()
+    return org
 
 @router.delete("/{org_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete Organization")
 async def delete_organization(

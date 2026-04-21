@@ -14,6 +14,7 @@ from app.config.settings import settings
 from app.core.constants import SEEDED_ORGANIZATIONS
 from app.models.organization import Organization
 from app.models.category import Category
+from app.models.audit_log import AuditLog
 import logging
 
 router = APIRouter()
@@ -29,7 +30,7 @@ async def get_users(
     current_user: Annotated[User, Depends(allow_read_users)],
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1, description="Page number"),
-    limit: int = Query(20, ge=1, le=100, description="Items per page"),
+    limit: int = Query(20, ge=1, le=500, description="Items per page"),
     search: str | None = Query(None, description="Search by name or email")
 ):
     """
@@ -74,6 +75,7 @@ async def update_user_role(
     user_id: uuid.UUID,
     current_user: Annotated[User, Depends(allow_admin)],
     service: UserService = Depends(get_user_service),
+    db: AsyncSession = Depends(get_db),
     role: UserRole = Form(...),
     organization_id: str | None = Form(None)
 ):
@@ -104,13 +106,19 @@ async def update_user_role(
         if role != UserRole.applicant:
             org_uuid = None  
             
-    return await service.update_user_role(user_id, role, org_uuid)
+    user = await service.update_user_role(user_id, role, org_uuid)
+    
+    audit = AuditLog(entity_type="user", entity_id=user_id, action="role_change", new_value=role.value, user_id=current_user.id)
+    db.add(audit)
+    await db.commit()
+    return user
 
 @router.patch("/{user_id}/status", response_model=UserRead, summary="Toggle Account Status")
 async def update_user_status(
     user_id: uuid.UUID,
     current_user: Annotated[User, Depends(allow_admin)],
     service: UserService = Depends(get_user_service),
+    db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
     is_active: bool = Form(...)
 ):
@@ -121,6 +129,10 @@ async def update_user_status(
     user = await service.update_user_status(user_id, is_active)
     if not is_active:
         await redis.set(f"active_session:{user_id}", "revoked", ex=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+        
+    audit = AuditLog(entity_type="user", entity_id=user_id, action="status_change", new_value=str(is_active), user_id=current_user.id)
+    db.add(audit)
+    await db.commit()
     return user
 
 @router.delete("/clear-database", summary="DANGEROUS: Wipe Test Data")
