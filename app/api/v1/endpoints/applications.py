@@ -18,6 +18,7 @@ from app.models.category import Category
 from app.models.tournament import Tournament
 from app.services.organization import OrganizationService
 from app.models.application import Application
+from app.models.organization import Organization
 from app.models.document import Document
 
 router = APIRouter()
@@ -309,17 +310,22 @@ async def export_applications_csv(
     status: str | None = Query(None, description="Filter by status"),
     category: str | None = Query(None, description="Filter by category"),
     organization_id: uuid.UUID | None = Query(None, description="Filter by organization ID"),
+    db: AsyncSession = Depends(get_db)
 ):
     """Exports all filtered applications as a downloadable CSV file."""
     
+    allowed_categories = None
     # SECURITY CHECK: Force org_admin to only export their own team's data
     if str(current_user.role) == "org_admin":
         if not current_user.organization_id:
             raise HTTPException(status_code=403, detail="Org Admin account is not associated with an organization.")
         organization_id = current_user.organization_id
+        org = await db.get(Organization, organization_id)
+        if org and org.allowed_categories:
+            allowed_categories = org.allowed_categories
         
     items, _ = await service.get_applications(
-        status=status, category=category, organization_id=organization_id, limit=None
+        status=status, category=category, organization_id=organization_id, allowed_categories=allowed_categories, limit=None
     )
     
     output = io.StringIO()
@@ -371,7 +377,8 @@ async def get_applications(
     status: str | None = Query(None, description="Filter by status (e.g., pending, approved)"),
     category: str | None = Query(None, description="Filter by category"),
     organization_id: uuid.UUID | None = Query(None, description="Filter by organization ID"),
-    sort_desc: bool = Query(True, description="Sort by submitted_at descending")
+    sort_desc: bool = Query(True, description="Sort by submitted_at descending"),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Retrieves a paginated list of applications for the Admin Dashboard Data Tables.
@@ -383,6 +390,7 @@ async def get_applications(
     """
     skip = (page - 1) * limit
     
+    allowed_categories = None
     # Resolve user filter constraint: admins see all, applicants see their own
     if str(current_user.role) in ["admin", "loc_admin", "officer"]:
         user_id_filter = None
@@ -391,6 +399,9 @@ async def get_applications(
         if not current_user.organization_id:
             raise HTTPException(status_code=403, detail="Org Admin account is not associated with an organization.")
         organization_id = current_user.organization_id
+        org = await db.get(Organization, organization_id)
+        if org and org.allowed_categories:
+            allowed_categories = org.allowed_categories
     else:
         user_id_filter = current_user.id
     
@@ -399,6 +410,7 @@ async def get_applications(
         status=status,
         category=category,
         organization_id=organization_id,
+        allowed_categories=allowed_categories,
         skip=skip, 
         limit=limit,
         sort_desc=sort_desc
@@ -426,10 +438,22 @@ async def get_application(
 async def review_applications_batch(
     review_in: ApplicationBatchReview,
     current_user: Annotated[User, Depends(allow_review_roles)],
-    service: ApplicationService = Depends(get_application_service)
+    service: ApplicationService = Depends(get_application_service),
+    db: AsyncSession = Depends(get_db)
 ):
     """Bulk approve or reject multiple applications simultaneously."""
-    applications = await service.review_applications_batch(current_user.id, review_in)
+    bypass_scoping = False
+    if str(current_user.role) == "org_admin":
+        bypass_scoping = True
+        stmt = select(Application).where(Application.id.in_(review_in.application_ids)).execution_options(ignore_tenant_scoping=True)
+        apps = (await db.execute(stmt)).scalars().all()
+        org = await db.get(Organization, current_user.organization_id)
+        allowed_cats = org.allowed_categories if org else []
+        for app in apps:
+            if app.organization_id != current_user.organization_id and app.category not in allowed_cats:
+                raise HTTPException(status_code=403, detail="Not authorized to review applications outside your organization or allowed categories.")
+                
+    applications = await service.review_applications_batch(current_user.id, review_in, bypass_tenant_scoping=bypass_scoping)
     
     # Automatically trigger background emails for all approved applications
     if review_in.status.lower() == "approved":
@@ -450,13 +474,16 @@ async def review_application(
     service: ApplicationService = Depends(get_application_service),
     db: AsyncSession = Depends(get_db)
 ):
-    # SECURITY CHECK: org_admin can only review their own organization's applications
+    bypass_scoping = False
     if str(current_user.role) == "org_admin":
-        app_to_review = await service.get_application_by_id(application_id)
-        if app_to_review.organization_id != current_user.organization_id:
-            raise HTTPException(status_code=403, detail="Not authorized to review applications outside your organization.")
+        bypass_scoping = True
+        app_to_review = await service.get_application_by_id(application_id, bypass_tenant_scoping=True)
+        org = await db.get(Organization, current_user.organization_id)
+        allowed_cats = org.allowed_categories if org else []
+        if app_to_review.organization_id != current_user.organization_id and app_to_review.category not in allowed_cats:
+            raise HTTPException(status_code=403, detail="Not authorized to review applications outside your organization or allowed categories.")
 
-    application = await service.review_application(application_id, current_user.id, review_in)
+    application = await service.review_application(application_id, current_user.id, review_in, bypass_tenant_scoping=bypass_scoping)
     
     # Automatically trigger a Celery background email if the application is approved
     if review_in.status.lower() == "approved":
@@ -487,12 +514,17 @@ async def review_document(
 ):
     # SECURITY CHECK: org_admin can only review documents belonging to their own organization
     if str(current_user.role) == "org_admin":
-        stmt = select(Application.organization_id).join(Document, Document.application_id == Application.id).where(Document.id == document_id)
-        org_id = (await db.execute(stmt)).scalar()
-        if org_id != current_user.organization_id:
-            raise HTTPException(status_code=403, detail="Not authorized to review documents outside your organization.")
+        stmt = select(Application.organization_id, Application.category).join(Document, Document.application_id == Application.id).where(Document.id == document_id).execution_options(ignore_tenant_scoping=True)
+        row = (await db.execute(stmt)).first()
+        if row:
+            org_id, category = row
+            org = await db.get(Organization, current_user.organization_id)
+            allowed_cats = org.allowed_categories if org else []
+            if org_id != current_user.organization_id and category not in allowed_cats:
+                raise HTTPException(status_code=403, detail="Not authorized to review documents outside your organization or allowed categories.")
 
-    document = await service.review_document(document_id, current_user.id, review_in)
+    bypass_scoping = str(current_user.role) == "org_admin"
+    document = await service.review_document(document_id, current_user.id, review_in, bypass_tenant_scoping=bypass_scoping)
     
     if review_in.status.lower() == "rejected":
         application = await service.get_application_by_id(document.application_id)

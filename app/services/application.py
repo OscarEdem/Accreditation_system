@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
@@ -77,6 +77,7 @@ class ApplicationService:
         status: str | None = None, 
         category: str | None = None,
         organization_id: uuid.UUID | None = None,
+        allowed_categories: list[str] | None = None,
         skip: int = 0, 
         limit: int | None = 100,
         sort_desc: bool = True
@@ -97,7 +98,10 @@ class ApplicationService:
         if category:
             count_stmt = count_stmt.where(Application.category == category)
             stmt = stmt.where(Application.category == category)
-        if organization_id:
+        if organization_id and allowed_categories:
+            count_stmt = count_stmt.where(or_(Application.organization_id == organization_id, Application.category.in_(allowed_categories))).execution_options(ignore_tenant_scoping=True)
+            stmt = stmt.where(or_(Application.organization_id == organization_id, Application.category.in_(allowed_categories))).execution_options(ignore_tenant_scoping=True)
+        elif organization_id:
             count_stmt = count_stmt.where(Application.organization_id == organization_id)
             stmt = stmt.where(Application.organization_id == organization_id)
             
@@ -130,8 +134,10 @@ class ApplicationService:
             )
         return applications, total
 
-    async def get_application_by_id(self, application_id: uuid.UUID) -> Application:
+    async def get_application_by_id(self, application_id: uuid.UUID, bypass_tenant_scoping: bool = False) -> Application:
         stmt = select(Application).options(selectinload(Application.documents)).where(Application.id == application_id)
+        if bypass_tenant_scoping:
+            stmt = stmt.execution_options(ignore_tenant_scoping=True)
         application = (await self.session.execute(stmt)).scalar_one_or_none()
         if not application:
             raise HTTPException(status_code=404, detail="Application not found")
@@ -187,8 +193,8 @@ class ApplicationService:
             )
             self.session.add(new_participant)
 
-    async def review_application(self, application_id: uuid.UUID, reviewer_id: uuid.UUID, review_data: ApplicationReview) -> Application:
-        application = await self.get_application_by_id(application_id)
+    async def review_application(self, application_id: uuid.UUID, reviewer_id: uuid.UUID, review_data: ApplicationReview, bypass_tenant_scoping: bool = False) -> Application:
+        application = await self.get_application_by_id(application_id, bypass_tenant_scoping=bypass_tenant_scoping)
         
         old_status = application.status
         application.status = review_data.status
@@ -225,8 +231,10 @@ class ApplicationService:
             await self.session.rollback()
             raise HTTPException(status_code=400, detail="Invalid tournament ID provided. Please ensure the selected tournament exists.")
 
-    async def review_applications_batch(self, reviewer_id: uuid.UUID, review_data: ApplicationBatchReview) -> list[Application]:
+    async def review_applications_batch(self, reviewer_id: uuid.UUID, review_data: ApplicationBatchReview, bypass_tenant_scoping: bool = False) -> list[Application]:
         stmt = select(Application).options(selectinload(Application.documents)).where(Application.id.in_(review_data.application_ids))
+        if bypass_tenant_scoping:
+            stmt = stmt.execution_options(ignore_tenant_scoping=True)
         result = await self.session.execute(stmt)
         applications = list(result.scalars().all())
         
@@ -275,8 +283,11 @@ class ApplicationService:
             await self.session.rollback()
             raise HTTPException(status_code=400, detail="Invalid tournament ID provided. Please ensure the selected tournament exists.")
 
-    async def review_document(self, document_id: uuid.UUID, reviewer_id: uuid.UUID, review_data: DocumentReview) -> Document:
-        document = await self.session.get(Document, document_id)
+    async def review_document(self, document_id: uuid.UUID, reviewer_id: uuid.UUID, review_data: DocumentReview, bypass_tenant_scoping: bool = False) -> Document:
+        stmt = select(Document).where(Document.id == document_id)
+        if bypass_tenant_scoping:
+            stmt = stmt.execution_options(ignore_tenant_scoping=True)
+        document = (await self.session.execute(stmt)).scalar_one_or_none()
         if not document:
             raise HTTPException(status_code=404, detail="Document not found")
         

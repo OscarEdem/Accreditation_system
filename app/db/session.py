@@ -19,6 +19,9 @@ def _add_tenant_scoping(execute_state: ORMExecuteState):
     Global ORM event that intercepts every query and automatically appends 
     tenant-scoping rules (IDOR protection at the database repository layer).
     """
+    if execute_state.execution_options.get("ignore_tenant_scoping", False):
+        return
+
     if execute_state.is_select and not execute_state.is_column_load:
         role = tenant_role.get()
         

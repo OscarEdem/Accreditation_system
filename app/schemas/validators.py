@@ -14,7 +14,7 @@ def validate_password_strength(password: str) -> str:
     Enforce consistent password requirements across the system.
     
     Requirements:
-    - 12+ characters (increased from 8 for better security)
+also    - 8+ characters
     - At least one uppercase letter
     - At least one lowercase letter
     - At least one digit
@@ -29,8 +29,8 @@ def validate_password_strength(password: str) -> str:
     Raises:
         ValueError: If password doesn't meet requirements
     """
-    if len(password) < 12:
-        raise ValueError("Password must be at least 12 characters long.")
+    if len(password) < 8:
+        raise ValueError("Password must be at least 8 characters long.")
     
     if not re.search(r"[A-Z]", password):
         raise ValueError("Password must contain at least one uppercase letter.")
