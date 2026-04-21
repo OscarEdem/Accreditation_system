@@ -130,7 +130,9 @@ PREFIX_PUBLIC_PATHS = [
     "/api/v1/public/stats", "/api/v1/applications/public", 
     "/api/v1/applications/track/status",
     "/api/v1/applications/options/roles",
-    "/api/v1/webhooks/sendgrid"
+    "/api/v1/webhooks/sendgrid",
+    "/api/v1/upload/presigned-url",
+    "/api/v1/upload/confirm"
 ]
 
 @app.middleware("http")

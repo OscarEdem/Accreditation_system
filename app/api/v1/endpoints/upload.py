@@ -2,8 +2,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from app.services.s3 import create_presigned_upload_url, verify_s3_file
-from app.api.deps import get_current_user
-from app.models.user import User
+from app.api.deps import RateLimiter
 
 router = APIRouter()
 
@@ -28,10 +27,9 @@ class PresignedUrlResponse(BaseModel):
 class ConfirmUploadRequest(BaseModel):
     file_key: str
 
-@router.post("/presigned-url", response_model=PresignedUrlResponse, summary="Get Direct S3 Upload URL")
+@router.post("/presigned-url", response_model=PresignedUrlResponse, summary="Get Direct S3 Upload URL", dependencies=[Depends(RateLimiter(requests=60, window=60))])
 async def get_presigned_url(
-    request: PresignedUrlRequest,
-    current_user: User = Depends(get_current_user)
+    request: PresignedUrlRequest
 ):
     """
     Generates a secure, temporary AWS S3 URL so the frontend can upload files directly to the cloud without bottlenecking the backend server.
@@ -62,7 +60,7 @@ async def get_presigned_url(
     if request.file_size > max_allowed_size:
         raise HTTPException(status_code=400, detail=f"File too large. Maximum size is {max_allowed_size // (1024 * 1024)}MB.")
         
-    logger.info(f"User {current_user.id} requested pre-signed S3 URL for {request.file_name}")
+    logger.info(f"Requested pre-signed S3 URL for {request.file_name}")
     
     url_data = create_presigned_upload_url(file_name=request.file_name, file_type=request.file_type, max_size=max_allowed_size)
     if not url_data:
@@ -70,10 +68,9 @@ async def get_presigned_url(
     
     return PresignedUrlResponse(**url_data)
 
-@router.post("/confirm", summary="Verify Successful Upload and File Content")
+@router.post("/confirm", summary="Verify Successful Upload and File Content", dependencies=[Depends(RateLimiter(requests=60, window=60))])
 async def confirm_upload(
-    request: ConfirmUploadRequest,
-    current_user: User = Depends(get_current_user)
+    request: ConfirmUploadRequest
 ):
     """
     After uploading to S3, call this endpoint with the `file_key` to verify:
