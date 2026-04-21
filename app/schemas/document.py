@@ -16,11 +16,11 @@ class DocumentType(str, Enum):
     liability_waiver = "Liability Waiver"
     other = "Other"
 
-from pydantic import HttpUrl, field_validator
+from pydantic import field_validator
 
 class DocumentBase(BaseModel):
     document_type: DocumentType
-    file_url: HttpUrl
+    file_url: str
 
     @field_validator('file_url')
     @classmethod

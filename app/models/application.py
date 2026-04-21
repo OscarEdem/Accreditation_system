@@ -24,6 +24,8 @@ class Application(BaseModel):
     organization_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True, index=True)
     
     category: Mapped[str] = mapped_column(String, index=True)
+    outlet_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    media_accreditation_type: Mapped[str | None] = mapped_column(String, nullable=True)
     photo_url: Mapped[str | None] = mapped_column(String, nullable=True)
     dob: Mapped[date | None] = mapped_column(Date, nullable=True)
     gender: Mapped[str | None] = mapped_column(String, nullable=True)

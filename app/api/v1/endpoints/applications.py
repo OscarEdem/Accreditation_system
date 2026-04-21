@@ -330,8 +330,9 @@ async def export_applications_csv(
         headers = [
             "id", "tournament_id", "user_id", "first_name", "last_name", "email",
             "phone_number", "passport_number", "specific_role",
-            "emergency_contact_name", "emergency_contact_phone", "special_requirements",
-            "organization_id", "category", "photo_url", "dob", "gender", "country",
+            "emergency_contact_name", "emergency_contact_phone", "special_requirements", "organization_id",
+            "category", "outlet_name", "media_accreditation_type",
+            "photo_url", "dob", "gender", "country",
             "sporting_disciplines", "status", "submitted_at", "reviewer_id",
             "reviewer_comments", "submitter_name", "document_urls"
         ]

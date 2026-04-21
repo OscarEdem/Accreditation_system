@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from enum import Enum
 from typing import Optional, List, Literal
-from pydantic import BaseModel, ConfigDict, field_validator, HttpUrl
+from pydantic import BaseModel, ConfigDict, field_validator
 from app.schemas.document import DocumentCreate, DocumentRead
 
 class GenderEnum(str, Enum):
@@ -44,7 +44,9 @@ class ApplicationBase(BaseModel):
     special_requirements: Optional[str] = None
     organization_id: Optional[uuid.UUID] = None
     category: ApplicationCategory
-    photo_url: Optional[HttpUrl] = None
+    outlet_name: Optional[str] = None
+    media_accreditation_type: Optional[str] = None
+    photo_url: Optional[str] = None
     dob: Optional[date] = None
     gender: Optional[GenderEnum] = None
     country: str

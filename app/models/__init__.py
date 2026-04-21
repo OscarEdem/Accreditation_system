@@ -7,7 +7,6 @@ from app.models.venue import Venue
 from app.models.tournament import Tournament
 from app.models.application import Application
 from app.models.team import Team
-from app.models.media import Media
 from app.models.service_staff import ServiceStaff
 from app.models.vip_guest import VIPGuest
 from app.models.zone import Zone
