@@ -7,6 +7,7 @@ class OrganizationBase(BaseModel):
     name: str
     type: str
     country: Optional[str] = None
+    allowed_categories: Optional[List[str]] = []
 
 class OrganizationCreate(OrganizationBase):
     pass
@@ -15,11 +16,11 @@ class OrganizationUpdate(BaseModel):
     name: Optional[str] = None
     type: Optional[str] = None
     country: Optional[str] = None
+    allowed_categories: Optional[List[str]] = None
 
 class OrganizationRead(OrganizationBase):
     id: uuid.UUID
     created_at: datetime
-    allowed_categories: Optional[List[str]] = []
     
     model_config = ConfigDict(from_attributes=True)
 

@@ -1,5 +1,5 @@
 import uuid
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, status, Form
 from fastapi.security import OAuth2PasswordRequestForm
@@ -13,12 +13,14 @@ from app.db.redis import get_redis
 from app.schemas.token import Token
 from app.schemas.user import UserCreate, UserRead, UserMeResponse, ForgotPasswordRequest, ResetPasswordRequest, UserInvite, AcceptInviteRequest, ResendInviteRequest, UserRole, UserUpdateLanguage
 from app.services.user import UserService
+from app.services.token_blacklist import TokenBlacklistService
 from app.core.security import create_access_token
 from app.config.settings import settings
 from app.api.deps import get_current_user, RoleChecker
 from app.models.user import User
 from app.models.organization import Organization
 from app.models.category import Category
+from app.models.session_invalidation import SessionInvalidation
 from app.workers.main import send_email_notification
 import logging
 from app.schemas.category import CategoryRead
@@ -31,6 +33,12 @@ allow_admin = RoleChecker(["admin", "loc_admin"])
 
 def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
     return UserService(db)
+
+def get_token_blacklist_service(
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis)
+) -> TokenBlacklistService:
+    return TokenBlacklistService(db, redis)
 
 @router.post("/register", response_model=UserRead, status_code=201, summary="Register a New Applicant")
 async def register_user(user_in: UserCreate, service: UserService = Depends(get_user_service)):
@@ -173,10 +181,21 @@ async def logout(
 async def force_logout_user(
     user_id: uuid.UUID,
     current_user: Annotated[User, Depends(allow_admin)],
+    db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis)
 ):
     """Allows an Admin to instantly terminate a specific user's active session."""
     await redis.set(f"active_session:{user_id}", "revoked", ex=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+    
+    # Record session invalidation in DB for crash recovery
+    invalidation = SessionInvalidation(
+        user_id=user_id,
+        session_id="all",
+        reason="force_logout"
+    )
+    db.add(invalidation)
+    await db.commit()
+    
     return {"message": f"User session for {user_id} has been forcefully terminated."}
 
 @router.post("/forgot-password")
@@ -207,20 +226,75 @@ async def forgot_password(
 
 @router.post("/reset-password")
 async def reset_password(
-    request: ResetPasswordRequest, 
+    request: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
     service: UserService = Depends(get_user_service),
+    token_blacklist_service: TokenBlacklistService = Depends(get_token_blacklist_service),
     redis: Redis = Depends(get_redis)
 ):
-    is_used = await redis.get(f"used_token:{request.token}")
-    if is_used:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This password reset link has already been used.")
-
-    if not await service.reset_password(request.token, request.new_password):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token")
-        
-    # Prevent token reuse (expires in 1 hour to match the token's lifespan)
-    await redis.set(f"used_token:{request.token}", "true", ex=3600)
-    return {"message": "Password successfully reset."}
+    """
+    Reset user password using a valid reset token.
+    
+    SECURITY:
+    - Tokens are single-use; reuse is prevented via TokenBlacklist
+    - Password change invalidates all active sessions
+    - Uses timing-attack resistant password comparison
+    """
+    
+    # Check if token has already been used (replay attack prevention)
+    is_consumed = await token_blacklist_service.is_token_consumed(request.token)
+    if is_consumed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This reset link has already been used. Please request a new one."
+        )
+    
+    # Verify token is valid and extract email
+    user_service = UserService(db)
+    email = user_service.verify_password_reset_token(request.token)
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token"
+        )
+    
+    # Get user and update password
+    user = await user_service.get_user_by_email(email)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Update password
+    await user_service.reset_password(request.token, request.new_password)
+    
+    # Blacklist the token immediately to prevent reuse
+    # Token expires 1 hour from now (matching JWT token TTL)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+    await token_blacklist_service.consume_token(
+        token=request.token,
+        token_type="password_reset",
+        expires_at=expires_at,
+        user_id=user.id,
+        reason="Password reset consumed"
+    )
+    
+    # Invalidate all active sessions for this user (force re-login with new password)
+    await redis.set(f"active_session:{user.id}", "revoked", ex=1800)
+    
+    # Record session invalidation in DB for crash recovery
+    invalidation = SessionInvalidation(
+        user_id=user.id,
+        session_id="all",
+        reason="password_change"
+    )
+    db.add(invalidation)
+    await db.commit()
+    
+    logger.info(f"Password reset successful for user: {user.id}")
+    
+    return {"message": "Password successfully reset. Please log in with your new password."}
 
 @router.post("/invite", response_model=UserRead, status_code=201)
 async def invite_user(
@@ -228,13 +302,18 @@ async def invite_user(
     current_user: Annotated[User, Depends(allow_admin)],
     service: UserService = Depends(get_user_service)
 ):
+    # SECURITY CHECK: Prevent LOC Admins from creating Super Admins (Privilege Escalation)
+    if user_in.role == UserRole.admin and str(current_user.role) != "admin":
+        raise HTTPException(status_code=403, detail="Only existing Super Admins can invite other Super Admins.")
+
     # Enforce Organization requirements based on Role
-    if user_in.role in [UserRole.org_admin, UserRole.applicant]:
+    if user_in.role == UserRole.org_admin:
         if not user_in.organization_id:
-            raise HTTPException(status_code=400, detail=f"An Organization must be selected for the '{user_in.role.value}' role.")
+            raise HTTPException(status_code=400, detail="An Organization must be selected for the org_admin role.")
     else:
-        # Ensure system admins/staff don't get tied to a participant organization
-        user_in.organization_id = None
+        # Ensure system admins/staff don't get tied to a participant organization. (Applicants can optionally have one).
+        if user_in.role != UserRole.applicant:
+            user_in.organization_id = None
 
     user = await service.invite_user(user_in)
     
@@ -257,19 +336,60 @@ async def invite_user(
 
 @router.post("/accept-invite")
 async def accept_invite(
-    request: AcceptInviteRequest, 
+    request: AcceptInviteRequest,
+    db: AsyncSession = Depends(get_db),
     service: UserService = Depends(get_user_service),
+    token_blacklist_service: TokenBlacklistService = Depends(get_token_blacklist_service),
     redis: Redis = Depends(get_redis)
 ):
-    is_used = await redis.get(f"used_token:{request.token}")
-    if is_used:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This invite link has already been used.")
-
-    if not await service.accept_invite(request.token, request.new_password):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired invite token")
-        
-    # Prevent token reuse (expires in 24 hours to match the token's lifespan)
-    await redis.set(f"used_token:{request.token}", "true", ex=86400)
+    """
+    Accept an invite and set initial password.
+    
+    SECURITY:
+    - Invite tokens are single-use; reuse is prevented via TokenBlacklist
+    - After successful activation, token cannot be used again
+    """
+    
+    # Check if token has already been used (replay attack prevention)
+    is_consumed = await token_blacklist_service.is_token_consumed(request.token)
+    if is_consumed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This invite link has already been used. Please request a new one."
+        )
+    
+    # Verify token is valid and extract email
+    user_service = UserService(db)
+    email = user_service.verify_invite_token(request.token)
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired invite token"
+        )
+    
+    # Accept invite and set password
+    if not await user_service.accept_invite(request.token, request.new_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to accept invite"
+        )
+    
+    # Get user for logging
+    user = await user_service.get_user_by_email(email)
+    
+    # Blacklist the token immediately to prevent reuse
+    # Token expires 24 hours from now (matching JWT token TTL)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    await token_blacklist_service.consume_token(
+        token=request.token,
+        token_type="invite",
+        expires_at=expires_at,
+        user_id=user.id if user else None,
+        reason="Invite accepted"
+    )
+    
+    logger.info(f"Invite accepted for user: {email}")
+    
     return {"message": "Password successfully set. You can now log in."}
 
 @router.post("/resend-invite")

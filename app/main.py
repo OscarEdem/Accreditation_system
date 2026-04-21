@@ -24,6 +24,14 @@ allow_admin = RoleChecker(["admin", "loc_admin"])
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+class HealthCheckFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        # Silently drop ALB health check requests to prevent log spam
+        return not ("GET / " in message or "GET /health" in message)
+
+logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
+
 async def run_startup_checks():
     """Runs external connection checks in the background to avoid blocking API boot sequence."""
     

@@ -16,3 +16,5 @@ from app.models.scan_log import ScanLog
 from app.models.zone_access import ZoneAccess
 from app.models.audit_log import AuditLog
 from app.models.document import Document
+from app.models.session_invalidation import SessionInvalidation
+from app.models.token_blacklist import TokenBlacklist

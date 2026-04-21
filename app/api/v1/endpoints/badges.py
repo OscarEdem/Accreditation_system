@@ -1,6 +1,6 @@
 import uuid
 from typing import Annotated, List
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -29,19 +29,33 @@ class BatchBadgeRequest(BaseModel):
 async def generate_badge(
     reference_id: uuid.UUID,
     current_user: Annotated[User, Depends(allow_badge_generate_roles)],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis)
 ):
     """
     Generates the cryptographic signature, QR code, and assigns a Serial Number to an approved participant.
     (Note: `reference_id` can be either the Participant ID or the original Application ID).
     Automatically triggers an email to the user with a download link.
     """
+    # Rate Limiting: Max 30 single badge generations per minute per user
+    rate_limit_key = f"rate_limit:badge_single:{current_user.id}"
+    requests_made = await redis.incr(rate_limit_key)
+    if requests_made == 1:
+        await redis.expire(rate_limit_key, 60)  # 60-second window
+        
+    if requests_made > 30:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many badge generations. Please wait a minute.")
+
     # Resolve ID: Frontend might pass an Application ID instead of a Participant ID
     stmt = select(Participant).where((Participant.id == reference_id) | (Participant.application_id == reference_id))
     participant = (await db.execute(stmt)).scalars().first()
     if not participant:
         raise HTTPException(status_code=404, detail="Participant not found. Ensure the application is approved.")
         
+    # SECURITY CHECK: org_admin can only generate badges for their own team
+    if str(current_user.role) == "org_admin" and participant.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Not authorized to generate badges for participants outside your organization.")
+
     participant_id = participant.id
 
     service = BadgeService(db)
@@ -81,18 +95,36 @@ async def generate_badge(
 async def generate_badges_batch(
     request: BatchBadgeRequest,
     current_user: Annotated[User, Depends(allow_badge_generate_roles)],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis)
 ):
     """
     Generates badges for an array of participant/application IDs.
     Useful when an Admin highlights multiple rows in the data table and clicks "Generate Badges".
     """
+    # Rate Limiting: Max 10 bulk generations per minute per user
+    rate_limit_key = f"rate_limit:badge_batch:{current_user.id}"
+    requests_made = await redis.incr(rate_limit_key)
+    if requests_made == 1:
+        await redis.expire(rate_limit_key, 60)  # 60-second window
+        
+    if requests_made > 10:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many batch badge generations. Please wait a minute.")
+
     # Resolve all IDs (handles both Participant IDs and Application IDs)
-    stmt = select(Participant.id).where(
+    stmt = select(Participant).where(
         (Participant.id.in_(request.participant_ids)) | 
         (Participant.application_id.in_(request.participant_ids))
     )
-    resolved_ids = list((await db.execute(stmt)).scalars().all())
+    participants = list((await db.execute(stmt)).scalars().all())
+
+    # SECURITY CHECK: org_admin can only generate badges for their own team
+    if str(current_user.role) == "org_admin":
+        for p in participants:
+            if p.organization_id != current_user.organization_id:
+                raise HTTPException(status_code=403, detail="Not authorized to generate badges for participants outside your organization.")
+
+    resolved_ids = [p.id for p in participants]
 
     service = BadgeService(db)
     try:
@@ -174,6 +206,8 @@ async def get_badge_data(
         raise HTTPException(status_code=403, detail="Not authorized to access this badge data.")
     if str(current_user.role) == "org_admin" and app_org_id != current_user.organization_id:
         raise HTTPException(status_code=403, detail="Not authorized to access this badge data.")
+    if str(current_user.role) == "scanner":
+        raise HTTPException(status_code=403, detail="Scanner accounts cannot download badge data.")
         
     # 1. Fetch Badge
     stmt = select(Badge).where(Badge.participant_id == participant.id)

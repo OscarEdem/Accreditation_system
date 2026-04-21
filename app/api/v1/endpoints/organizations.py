@@ -21,10 +21,11 @@ async def create_organization(
     service: OrganizationService = Depends(get_organization_service),
     name: str = Form(...),
     type: str = Form(...),
-    country: str | None = Form(None)
+    country: str | None = Form(None),
+    allowed_categories: list[str] = Form(default=[])
 ):
     """Admin endpoint to register a new organization/team in the system."""
-    org_in = OrganizationCreate(name=name, type=type, country=country)
+    org_in = OrganizationCreate(name=name, type=type, country=country, allowed_categories=allowed_categories)
     return await service.create_organization(org_in)
 
 @router.get("/", response_model=OrganizationListResponse, summary="List Organizations (Paginated)")

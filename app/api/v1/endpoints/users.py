@@ -91,12 +91,18 @@ async def update_user_role(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid organization_id format")
             
+    # SECURITY CHECK: Prevent LOC Admins from granting Super Admin access (Privilege Escalation)
+    if role == UserRole.admin and str(current_user.role) != "admin":
+        raise HTTPException(status_code=403, detail="Only existing Super Admins can grant the Super Admin role.")
+
     # Enforce Organization requirements based on Role
-    if role in [UserRole.org_admin, UserRole.applicant]:
+    if role == UserRole.org_admin:
         if not org_uuid:
-            raise HTTPException(status_code=400, detail=f"An Organization must be selected for the {role.value} role.")
+            raise HTTPException(status_code=400, detail="An Organization must be selected for the org_admin role.")
     else:
-        org_uuid = None  # Ensure system admins/staff don't get tied to a participant organization
+        # Ensure system admins/staff don't get tied to a participant organization. (Applicants can optionally have one).
+        if role != UserRole.applicant:
+            org_uuid = None  
             
     return await service.update_user_role(user_id, role, org_uuid)
 

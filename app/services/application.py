@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
 from app.models.application import Application
 from app.schemas.application import ApplicationCreate, ApplicationReview, ApplicationBatchReview, ApplicationRead, ApplicationReadWithSubmitter
+from redis.asyncio import Redis
 from app.models.user import User
 from app.models.audit_log import AuditLog
 from app.models.document import Document
@@ -14,8 +15,9 @@ from app.models.participant import Participant
 from app.models.badge import Badge
 
 class ApplicationService:
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, redis: Redis | None = None):
         self.session = session
+        self.redis = redis
 
     async def create_application(self, application_in: ApplicationCreate, bypass_duplicate_check: bool = False) -> Application:
         # Prevent double-submissions for the same user
@@ -208,6 +210,13 @@ class ApplicationService:
             )
             self.session.add(audit_log)
             
+            # 🔒 ZERO-TRUST: O(1) Cache Invalidation
+            if self.redis:
+                stmt = select(Participant.id).where(Participant.application_id == application.id)
+                part_id = (await self.session.execute(stmt)).scalar()
+                if part_id:
+                    await self.redis.incr(f"participant_version:{part_id}")
+            
         try:
             await self.session.commit()
             await self.session.refresh(application)
@@ -224,6 +233,7 @@ class ApplicationService:
         if not applications:
             raise HTTPException(status_code=404, detail="No applications found.")
 
+        changed_app_ids = []
         for application in applications:
             old_status = application.status
             application.status = review_data.status
@@ -235,6 +245,7 @@ class ApplicationService:
 
             # Generate an Audit Log entry if the status was changed
             if old_status != review_data.status:
+                changed_app_ids.append(application.id)
                 audit_log = AuditLog(
                     entity_type="application",
                     entity_id=application.id,
@@ -244,6 +255,16 @@ class ApplicationService:
                     user_id=reviewer_id
                 )
                 self.session.add(audit_log)
+                
+        # 🔒 ZERO-TRUST: O(1) Cache Invalidation Pipeline
+        if changed_app_ids and self.redis:
+            stmt = select(Participant.id).where(Participant.application_id.in_(changed_app_ids))
+            part_ids = (await self.session.execute(stmt)).scalars().all()
+            if part_ids:
+                pipeline = self.redis.pipeline()
+                for pid in part_ids:
+                    pipeline.incr(f"participant_version:{pid}")
+                await pipeline.execute()
                 
         try:
             await self.session.commit()

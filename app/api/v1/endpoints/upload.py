@@ -70,17 +70,47 @@ async def get_presigned_url(
     
     return PresignedUrlResponse(**url_data)
 
-@router.post("/confirm", summary="Verify Successful Upload")
+@router.post("/confirm", summary="Verify Successful Upload and File Content")
 async def confirm_upload(
     request: ConfirmUploadRequest,
     current_user: User = Depends(get_current_user)
 ):
     """
-    (Optional but recommended). After uploading to S3, call this endpoint with the `file_key` 
-    to have the backend double-check that AWS actually received and saved the file.
+    After uploading to S3, call this endpoint with the `file_key` to verify:
+    1. The file exists in S3
+    2. The file's content matches the expected MIME type (prevents polyglot attacks)
     """
-    is_valid = verify_s3_file(request.file_key)
-    if not is_valid:
+    import boto3
+    import magic
+    from app.config.settings import settings
+    s3_client = boto3.client(
+        "s3",
+        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        region_name=settings.AWS_REGION
+    )
+    try:
+        obj = s3_client.get_object(Bucket=settings.S3_BUCKET_NAME, Key=request.file_key)
+        file_content = obj["Body"].read(8192)  # Read first 8KB
+        detected_type = magic.from_buffer(file_content, mime=True)
+    except Exception as e:
+        logger.error(f"S3 file verification failed: {e}")
         raise HTTPException(status_code=404, detail="File not found in S3. Upload may have failed.")
-        
-    return {"status": "confirmed", "file_key": request.file_key}
+
+    # Determine expected type from file extension
+    ext = request.file_key.split(".")[-1].lower()
+    expected_types = {
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "png": "image/png",
+        "webp": "image/webp",
+        "pdf": "application/pdf"
+    }
+    expected_type = expected_types.get(ext)
+    if not expected_type or detected_type != expected_type:
+        logger.warning(f"File type mismatch: expected {expected_type}, got {detected_type}")
+        # Optionally, delete the file if invalid
+        s3_client.delete_object(Bucket=settings.S3_BUCKET_NAME, Key=request.file_key)
+        raise HTTPException(status_code=400, detail=f"File content does not match expected type. Detected: {detected_type}")
+
+    return {"status": "confirmed", "file_key": request.file_key, "mime_type": detected_type}

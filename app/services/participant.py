@@ -43,11 +43,16 @@ class ParticipantService:
         return list(result.scalars().all()), total
 
     async def get_participant_by_id(self, participant_id: uuid.UUID) -> Participant:
+        """
+        Retrieve participant by ID only.
+        
+        SECURITY: Does not allow retrieval by application_id to prevent IDOR attacks.
+        Ownership/authorization checks must be performed at the endpoint level.
+        """
         stmt = select(Participant).options(
             selectinload(Participant.application).selectinload(Application.documents)
-        ).where(
-            (Participant.id == participant_id) | (Participant.application_id == participant_id)
-        )
+        ).where(Participant.id == participant_id)
+        
         participant = (await self.session.execute(stmt)).scalars().first()
         if not participant:
             raise HTTPException(status_code=404, detail="Participant not found")

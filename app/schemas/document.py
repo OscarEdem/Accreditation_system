@@ -16,9 +16,28 @@ class DocumentType(str, Enum):
     liability_waiver = "Liability Waiver"
     other = "Other"
 
+from pydantic import HttpUrl, field_validator
+
 class DocumentBase(BaseModel):
     document_type: DocumentType
-    file_url: str
+    file_url: HttpUrl
+
+    @field_validator('file_url')
+    @classmethod
+    def validate_file_url(cls, v: str) -> str:
+        # Only allow HTTPS URLs from the configured S3 bucket
+        from urllib.parse import urlparse
+        from app.config.settings import settings
+        parsed = urlparse(str(v))
+        if parsed.scheme != "https":
+            raise ValueError("Document URLs must use HTTPS protocol")
+        allowed_domains = [
+            f"{settings.S3_BUCKET_NAME}.s3.amazonaws.com",
+            f"{settings.S3_BUCKET_NAME}.s3.{settings.AWS_REGION}.amazonaws.com"
+        ]
+        if parsed.netloc not in allowed_domains:
+            raise ValueError(f"Document must be hosted on approved S3 bucket")
+        return str(v)
 
 class DocumentCreate(DocumentBase):
     pass

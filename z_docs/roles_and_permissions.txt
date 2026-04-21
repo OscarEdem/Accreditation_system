@@ -1,0 +1,66 @@
+===============================================================================
+ACCRA 2026 ACCREDITATION MANAGEMENT SYSTEM (AMS)
+ROLES AND PERMISSIONS (ACCESS CONTROL MATRIX)
+===============================================================================
+
+This document outlines the six distinct user roles within the AMS and details 
+the exact capabilities, boundaries, and restrictions for each.
+
+1. SUPER ADMIN (`admin`)
+-------------------------------------------------------------------------------
+The highest level of access. Primarily for IT staff and system administrators.
+- Access to ALL system endpoints.
+- User Management: Can create, invite, activate/deactivate users, and change roles.
+- System Actions: Can force-logout any user, clear the test database, and trigger GDPR scrubbing.
+- Configuration: Full access to create/edit Tournaments, Venues, Categories, and Zones.
+- Accreditation: Can review ANY application, generate ANY badge, and revoke badges globally.
+- Dashboards: Can view all system statistics and live scan logs.
+
+2. LOC ADMIN (`loc_admin`)
+-------------------------------------------------------------------------------
+Local Organizing Committee Administrator. The head of operations for the tournament.
+- Configuration: Full access to manage Tournaments, Venues, and Zones.
+- Security Management: Manages the "Zone Access Matrix" (deciding which Categories get into which Zones).
+- User Management: Can view all users, invite new Officers/Scanners/Org Admins.
+- Accreditation: Can view and review ANY application. Can generate ANY badge.
+- Security Dashboards: Can view the live WebSocket security alerts and all historical scan logs.
+- Restrictions: Cannot perform destructive IT tasks like clearing the database.
+
+3. ACCREDITATION OFFICER (`officer`)
+-------------------------------------------------------------------------------
+Dedicated staff responsible for vetting participant data and issuing credentials.
+- Application Review: Can view all applications, approve/reject/return them, and review specific documents (Passports, Medical).
+- Badge Management: Can generate badges (single or bulk) and revoke badges for security violations.
+- Reporting: Can export filtered CSVs of all participants.
+- Security Dashboards: Can view scan logs to trace where a participant has been.
+- Restrictions: Cannot alter the Zone Access Matrix, cannot edit Tournaments/Venues, cannot change user roles.
+
+4. ORGANIZATION ADMIN (`org_admin`)
+-------------------------------------------------------------------------------
+A team lead, media house editor, or delegation head (e.g., Chef de Mission for Team Ghana).
+- Strictly Tenant-Scoped: They can ONLY interact with data tied to their specific `organization_id`.
+- Batch Submissions: Can submit bulk applications on behalf of their team members (bypassing duplicate checks).
+- Application Review: Can approve or reject applications exclusively for their own team members.
+- Badge Generation: Can generate badges (single or bulk) exclusively for their own team.
+- Reporting: Can view and export CSVs of their own participants.
+- Restrictions: Cannot view participants from other organizations. Cannot generate badges for others. Cannot revoke badges once issued. Cannot view scan logs.
+
+5. SCANNER OPERATOR (`scanner`)
+-------------------------------------------------------------------------------
+Physical gate personnel utilizing mobile devices to control venue access.
+- Scanning: Can process physical QR code scans (checks cryptographic signature, anti-passback, and Zone Access rules).
+- Identity Verification: Can fetch the photo and name of a scanned participant to visually confirm their identity on their device.
+- Live View: Can connect to the live WebSocket to see gate alerts.
+- Restrictions: Cannot view, edit, or manage applications. Cannot generate badges. Cannot export participant lists.
+
+6. APPLICANT (`applicant`)
+-------------------------------------------------------------------------------
+The standard end-user registering for the tournament.
+- Self-Service: Can submit a public application for themselves.
+- Options: Restricted to selecting specific roles based on the Category they apply for.
+- Status Tracking: Can track the status of their own application.
+- Document Uploads: Can securely upload their photo and required documents to AWS S3.
+- Badge Download: Can download their own generated PDF badge once approved.
+- Restrictions: Strictly isolated to their own `user_id`. Cannot view ANY other applications or badges. Cannot access admin dashboards.
+
+===============================================================================

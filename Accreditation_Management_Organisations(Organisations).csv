@@ -1,4 +1,4 @@
-﻿No.,Organisation,Category,Athletes,Team Officials,Technical Officials,LOC Staff,Volunteers,Media,VIP/Guests,Service Staff
+﻿No.,Organisation,Category,athletes,Team Officials,Technical Officials,LOC Staff,Volunteers,Media,VIP/Guests,Service Staff
 1,Team Algeria,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
 2,Team Angola,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
 3,Team Benin,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
@@ -55,7 +55,7 @@
 54,Team Zimbabwe,Country Team,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE
 55,LOC Staff,LOC,FALSE,FALSE,FALSE,TRUE,TRUE,FALSE,TRUE,TRUE
 56,Media,Media,FALSE,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE,FALSE
-57,International Technical Official,Technical Official,FALSE,FALSE,TRUE,FALSE,FALSE,FALSE,FALSE,FALSE
+57,International Technical Official,Technical Official,FALSE,FALSE,TRUE,FALSE,FALSE,FALSE,TRUE,FALSE
 58,Ghana Athletics Association,National Federation,FALSE,FALSE,TRUE,FALSE,FALSE,FALSE,TRUE,FALSE
 59,Volunteer,Volunteer,FALSE,FALSE,FALSE,FALSE,TRUE,FALSE,FALSE,FALSE
 60,Service Staff,Service Staff,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,TRUE

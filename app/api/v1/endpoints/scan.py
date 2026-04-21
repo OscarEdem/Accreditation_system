@@ -20,6 +20,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 allow_scan_roles = RoleChecker(["admin", "scanner"])
+allow_read_scan_roles = RoleChecker(["admin", "loc_admin", "officer", "scanner"])
 
 def get_scan_service(
     db: AsyncSession = Depends(get_db),
@@ -66,7 +67,7 @@ async def scan_participant(
 @router.get("/participant/{participant_id}", response_model=ScanParticipantProfile, status_code=200, summary="Get Scanned Profile Details")
 async def get_participant_profile(
     participant_id: uuid.UUID,
-    current_user: Annotated[User, Depends(allow_scan_roles)],
+    current_user: Annotated[User, Depends(allow_read_scan_roles)],
     service: ScanService = Depends(get_scan_service)
 ):
     """
@@ -80,7 +81,7 @@ async def get_participant_profile(
 
 @router.get("/logs", response_model=ScanLogListResponse, status_code=200, summary="List Scan Logs (Paginated)")
 async def get_scan_logs(
-    current_user: Annotated[User, Depends(allow_scan_roles)],
+    current_user: Annotated[User, Depends(allow_read_scan_roles)],
     service: ScanService = Depends(get_scan_service),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(20, ge=1, le=100, description="Items per page"),

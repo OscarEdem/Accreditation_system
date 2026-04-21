@@ -6,7 +6,6 @@ from app.db.base import BaseModel
 
 class Document(BaseModel):
     __tablename__ = "documents"
-
     application_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("applications.id"), index=True)
     document_type: Mapped[str] = mapped_column(String)  # e.g., passport, medical_clearance
     file_url: Mapped[str] = mapped_column(String)
