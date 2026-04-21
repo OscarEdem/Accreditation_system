@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import String, ForeignKey, Boolean, DateTime
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import BaseModel
 
@@ -16,3 +16,5 @@ class ScanLog(BaseModel):
     reason: Mapped[str | None] = mapped_column(String, nullable=True)
     direction: Mapped[str] = mapped_column(String(3)) # IN or OUT
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)
+
+    participant = relationship("Participant")

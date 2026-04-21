@@ -62,9 +62,9 @@ def validate_name(name: str, field_name: str = "Name") -> str:
     Raises:
         ValueError: If name contains invalid characters
     """
-    # Allow letters, spaces, hyphens, apostrophes
-    if not re.match(r"^[a-zA-Z\s'-]+$", name):
-        raise ValueError(f"{field_name} can only contain letters, spaces, hyphens, and apostrophes.")
+    # Allow letters, spaces, hyphens, apostrophes, and periods
+    if not re.match(r"^[a-zA-Z\s'\-\.]+$", name):
+        raise ValueError(f"{field_name} can only contain letters, spaces, hyphens, apostrophes, and periods.")
     
     # Reject if mostly numbers
     digit_count = sum(c.isdigit() for c in name)

@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy import String, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import BaseModel
 
@@ -11,3 +11,5 @@ class Badge(BaseModel):
     serial_number: Mapped[str] = mapped_column(String, unique=True, index=True)
     qr_hmac: Mapped[str] = mapped_column(String, unique=True)
     status: Mapped[str] = mapped_column(String, default="active")  # active, revoked, printed
+
+    participant = relationship("Participant")
