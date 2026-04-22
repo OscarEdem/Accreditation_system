@@ -37,8 +37,8 @@ class ParticipantRole(str, Enum):
     # == 2. Technical Officials ==
     chief_judge = "Chief Judge"
     track_judge = "Track Judge"
-    race_walk_judge = "Race Walk Judge"
-    jury = "Jury"
+    race_walk_judge = "Walking Judge"
+    jury = "Jury of Appeal"
     chief_referee = "Chief Referee"
     referee = "Referee"
     starter = "Starter"
@@ -58,6 +58,7 @@ class ParticipantRole(str, Enum):
     technical_information_officer = "Technical Information Officer"
     competition_secretary = "Competition Secretary"
     event_coordinator = "Event Coordinator"
+    announcer = "Announcer"
 
     # == 3. LOC Staff ==
     loc_chairperson = "LOC Chairperson"
@@ -82,6 +83,8 @@ class ParticipantRole(str, Enum):
     it_technology_officer = "IT/Technology Officer"
     security_coordinator = "Security Coordinator"
     medical_coordinator = "Medical Coordinator"
+    accreditation_manager = "Accreditation Manager"
+    accreditation_staff = "Accreditation Staff"
 
     # == 4. Media ==
     director_producer = "Director/Producer"
@@ -127,8 +130,18 @@ class ParticipantRole(str, Enum):
     mosr_staff = "MOSR Staff"
     nsa_board_chairperson = "NSA Board Chairperson"
     nsa_director = "NSA Director General"
-    nsa_deputy_directors = "NSA Deputy Director"
+    nsa_deputy_directors = "NSA Deputy Director General"
     nsa_members = "NSA Board Member"
+    general_coordinator = "General Coordinator"
+    technical_coordinator = "Technical Coordinator"
+    technical_delegate = "Technical Delegate"
+    deputy_technical_delegate = "Deputy Technical Delegate"
+    antidoping_control_delegate = "Antidoping Control Delegate"
+    organizational_delegate = "Organizational Delegate"
+    protocol_delegate = "Protocol Delegate"
+    tv_production_media_delegate = "TV Production & Media Delegate"
+    caa_headquarters_staff = "CAA Headquarters Staff"
+    accompanying_guest = "Accompanying Guest"
 
     # == 6. Service Staff ==
     access_control_officer = "Access Control Officer"
@@ -156,6 +169,7 @@ class ParticipantRole(str, Enum):
     event_crew = "Event Crew"
     performers = "Performers"
     vendor = "Vendor"
+    official_content_crew = "Official Content Crew"
 
     # == 7. Volunteers ==
     technical_competition_support_volunteer = "Technical and Competition Support Volunteer"

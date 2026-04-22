@@ -35,14 +35,14 @@ ROLE_MAPPING = {
             "TIC Coordinator", "Team Support Staff"
         ],
         "Technical Officials": [
-            "Chief Judge", "Track Judge", "Race Walk Judge", "Jury", "Chief Referee",
+            "Chief Judge", "Track Judge", "Walking Judge", "Jury of Appeal", "Chief Referee",
             "Referee", "Starter", "Recall Starter", "Photo Finish Referee",
             "Wind Gauge Operator", "Technical Manager", "Field Judge – High Jump",
             "Field Judge – Pole Vault", "Field Judge – Long/Triple Jump",
             "Field Judge – Throwing Events", "Doping Control Officer",
             "Anti-Doping Chaperone", "Medical Officer", "Timekeeper",
             "Records & Results Officer", "Technical Information Officer",
-            "Competition Secretary", "Event Coordinator"
+            "Competition Secretary", "Event Coordinator", "Announcer"
         ],
         "LOC Staff": [
             "LOC Chairperson", "LOC Member", "Director General", "Event Director",
@@ -51,7 +51,8 @@ ROLE_MAPPING = {
             "Legal Officer", "Marketing & Communications Officer", "Logistics Officer",
             "Administrative Officer", "Accreditation Officer", "Protocol Officer",
             "Transport Coordinator", "Volunteer Coordinator", "Broadcast Coordinator",
-            "IT/Technology Officer", "Security Coordinator", "Medical Coordinator"
+            "IT/Technology Officer", "Security Coordinator", "Medical Coordinator",
+            "Accreditation Manager", "Accreditation Staff"
         ],
         "Media": [
             "Director/Producer", "Editor", "Rights Holder Media", "Production Crew",
@@ -70,7 +71,10 @@ ROLE_MAPPING = {
             "National Athletics Federation Member", "NOC President", "NOC Secretary General",
             "NOC Member", "Guest of Honor", "Invited Guest", "International Observer",
             "MOSR Chief Director", "MOSR Technical Advisor", "MOSR Director", "MOSR Staff",
-            "NSA Board Chairperson", "NSA Director General", "NSA Deputy Director", "NSA Board Member"
+            "NSA Board Chairperson", "NSA Director General", "NSA Deputy Director General", "NSA Board Member",
+            "General Coordinator", "Technical Coordinator", "Technical Delegate", "Deputy Technical Delegate",
+            "Antidoping Control Delegate", "Organizational Delegate", "Protocol Delegate", 
+            "TV Production & Media Delegate", "CAA Headquarters Staff", "Accompanying Guest"
         ],
         "Service Staff": [
             "Access Control Officer", "Security Supervisor", "Security Officer",
@@ -79,7 +83,7 @@ ROLE_MAPPING = {
             "Driver/Chauffeur", "Catering Supervisor", "Catering Staff",
             "Facilities Supervisor", "Facilities/Cleaning Staff", "Electrician/Technician",
             "IT Support Technician", "IT Support Staff", "Equipment/Logistics Handler",
-            "Event Manager", "Ceremonies", "Artist", "Event Crew", "Performers", "Vendor"
+            "Event Manager", "Ceremonies", "Artist", "Event Crew", "Performers", "Vendor", "Official Content Crew"
         ],
         "Volunteer": [
             "Technical and Competition Support Volunteer", "Media and Communications Volunteer",
