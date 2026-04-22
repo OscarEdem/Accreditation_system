@@ -20,6 +20,7 @@ from app.services.organization import OrganizationService
 from app.models.application import Application
 from app.models.organization import Organization
 from app.models.document import Document
+from app.config.settings import settings
 
 router = APIRouter()
 
@@ -172,6 +173,60 @@ async def submit_public_application(
         context={"first_name": application.first_name}
     )
     
+    return application
+
+@router.get("/public/{application_id}", response_model=ApplicationRead, summary="Get Returned Application for Editing", dependencies=[Depends(RateLimiter(requests=10, window=60))])
+async def get_public_returned_application(
+    application_id: uuid.UUID,
+    email: str = Query(..., description="Email address used in the original application"),
+    service: ApplicationService = Depends(get_application_service)
+):
+    """Fetches the full application details so the frontend can pre-fill the form for a resubmission."""
+    application = await service.get_application_by_id(application_id, bypass_tenant_scoping=True)
+    
+    if application.email.lower() != email.lower():
+        raise HTTPException(status_code=403, detail="Email verification failed. Please ensure you entered the exact email used in the application.")
+        
+    if application.status.lower() != "returned":
+        raise HTTPException(status_code=400, detail="Only returned applications can be accessed publicly.")
+        
+    return application
+
+@router.put("/public/{application_id}/resubmit", response_model=ApplicationRead, summary="Resubmit a Returned Application", dependencies=[Depends(RateLimiter(requests=5, window=60))])
+async def resubmit_returned_application(
+    application_id: uuid.UUID,
+    application_in: ApplicationCreate,
+    service: ApplicationService = Depends(get_application_service),
+    db: AsyncSession = Depends(get_db)
+):
+    """Allows an applicant to correct and resubmit an application that was 'returned' by reviewers."""
+    category_exists = await db.scalar(select(Category).where(Category.name == application_in.category.value))
+    if not category_exists:
+        raise HTTPException(status_code=400, detail=f"Category '{application_in.category.value}' does not exist in the system.")
+
+    if application_in.specific_role:
+        allowed_roles = ROLE_MAPPING.get(application_in.category.value, [])
+        if application_in.specific_role not in allowed_roles:
+            raise HTTPException(status_code=400, detail=f"Role '{application_in.specific_role}' is not valid for category '{application_in.category.value}'.")
+            
+    if getattr(application_in, "organization_id", None):
+        org_service = OrganizationService(db)
+        org = await org_service.get_organization_by_id(application_in.organization_id)
+        if not org:
+            raise HTTPException(status_code=400, detail="Invalid organization_id. Organization does not exist.")
+        if org.allowed_categories is not None:
+            if application_in.category.value not in org.allowed_categories:
+                raise HTTPException(status_code=400, detail=f"Category '{application_in.category.value}' is not allowed for organization type '{org.type}'.")
+
+    application = await service.resubmit_returned_application(application_id, application_in)
+    
+    # Re-trigger the received email so they know it was submitted successfully
+    send_email_notification.delay(
+        recipient_email=application.email,
+        template_key="app_received",
+        language=application.preferred_language or 'en',
+        context={"first_name": application.first_name}
+    )
     return application
 
 @router.post("/batch", response_model=List[ApplicationRead], status_code=201, summary="Submit Multiple Applications", dependencies=[Depends(RateLimiter(requests=5, window=60))])
@@ -473,6 +528,28 @@ async def review_applications_batch(
                 language=app.preferred_language or 'en',
                 context={"first_name": app.first_name, "category": app.category}
             )
+    elif review_in.status.lower() == "returned":
+        for app in applications:
+            update_link = f"{settings.FRONTEND_URL}/track?ref={app.id}"
+            send_email_notification.delay(
+                recipient_email=app.email,
+                template_key="app_returned",
+                language=app.preferred_language or 'en',
+                context={
+                    "first_name": app.first_name,
+                    "application_id": str(app.id),
+                    "return_reason": review_in.reviewer_comments or "Please review your application.",
+                    "update_link": update_link
+                }
+            )
+    elif review_in.status.lower() == "rejected":
+        for app in applications:
+            send_email_notification.delay(
+                recipient_email=app.email,
+                template_key="app_rejected",
+                language=app.preferred_language or 'en',
+                context={"first_name": app.first_name, "rejection_reason": review_in.reviewer_comments or "Your application has been rejected."}
+            )
     return applications
 
 @router.put("/{application_id}/review", response_model=ApplicationRead)
@@ -502,12 +579,25 @@ async def review_application(
             language=application.preferred_language or 'en',
             context={"first_name": application.first_name, "category": application.category}
         )
-    elif review_in.status.lower() in ["rejected", "returned"]:
+    elif review_in.status.lower() == "returned":
+        update_link = f"{settings.FRONTEND_URL}/track?ref={application.id}"
         send_email_notification.delay(
             recipient_email=application.email,
-            template_key="doc_rejected",  # You can create a specific app_rejected template later
+            template_key="app_returned",
             language=application.preferred_language or 'en',
-            context={"first_name": application.first_name, "document_type": "Application", "rejection_reason": review_in.reviewer_comments or "Please review your application."}
+            context={
+                "first_name": application.first_name,
+                "application_id": str(application.id),
+                "return_reason": review_in.reviewer_comments or "Please review your application.",
+                "update_link": update_link
+            }
+        )
+    elif review_in.status.lower() == "rejected":
+        send_email_notification.delay(
+            recipient_email=application.email,
+            template_key="app_rejected",
+            language=application.preferred_language or 'en',
+            context={"first_name": application.first_name, "rejection_reason": review_in.reviewer_comments or "Your application has been rejected."}
         )
 
             

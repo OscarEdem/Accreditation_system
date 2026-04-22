@@ -134,6 +134,39 @@ class ApplicationService:
             )
         return applications, total
 
+    async def resubmit_returned_application(self, application_id: uuid.UUID, application_in: ApplicationCreate) -> Application:
+        stmt = select(Application).options(selectinload(Application.documents)).where(Application.id == application_id).execution_options(ignore_tenant_scoping=True)
+        application = (await self.session.execute(stmt)).scalar_one_or_none()
+        
+        if not application:
+            raise HTTPException(status_code=404, detail="Application not found.")
+            
+        if application.status.lower() != "returned":
+            raise HTTPException(status_code=400, detail="Only returned applications can be resubmitted.")
+            
+        if application.email.lower() != application_in.email.lower():
+            raise HTTPException(status_code=403, detail="Email address does not match the original application.")
+
+        app_data = application_in.model_dump(exclude={"documents", "user_id", "tournament_id"})
+        
+        for key, value in app_data.items():
+            setattr(application, key, value)
+            
+        application.status = "pending"
+        application.reviewer_comments = None
+        
+        if application_in.documents:
+            for doc in application.documents:
+                await self.session.delete(doc)
+            new_docs = [Document(**doc.model_dump(), application_id=application.id) for doc in application_in.documents]
+            self.session.add_all(new_docs)
+            
+        await self.session.commit()
+        await self.session.refresh(application)
+        
+        stmt = select(Application).options(selectinload(Application.documents)).where(Application.id == application.id).execution_options(ignore_tenant_scoping=True)
+        return (await self.session.execute(stmt)).scalar_one()
+
     async def get_application_by_id(self, application_id: uuid.UUID, bypass_tenant_scoping: bool = False) -> Application:
         stmt = select(Application).options(selectinload(Application.documents)).where(Application.id == application_id)
         if bypass_tenant_scoping:
