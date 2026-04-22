@@ -4,6 +4,7 @@ import uvicorn
 from contextlib import asynccontextmanager
 import asyncio
 from datetime import datetime, timezone
+import re
 from typing import Literal
 from fastapi import FastAPI, Depends, Request
 from fastapi.responses import JSONResponse
@@ -31,6 +32,18 @@ class HealthCheckFilter(logging.Filter):
         return not ("GET / " in message or "GET /health" in message)
 
 logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
+
+class PIISanitizerFilter(logging.Filter):
+    """Masks Personally Identifiable Information (PII) like emails from logs."""
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if "@" in msg:
+            msg = re.sub(r'([a-zA-Z0-9_.+-]{2})[a-zA-Z0-9_.+-]*(@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)', r'\1***\2', msg)
+            record.msg = msg
+            record.args = ()
+        return True
+
+logging.getLogger("app").addFilter(PIISanitizerFilter())
 
 async def run_startup_checks():
     """Runs external connection checks in the background to avoid blocking API boot sequence."""

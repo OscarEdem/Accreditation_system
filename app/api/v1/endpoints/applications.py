@@ -422,15 +422,20 @@ async def get_applications(
 async def get_application(
     application_id: uuid.UUID,
     current_user: Annotated[User, Depends(get_current_user)],
-    service: ApplicationService = Depends(get_application_service)
+    service: ApplicationService = Depends(get_application_service),
+    db: AsyncSession = Depends(get_db)
 ):
-    application = await service.get_application_by_id(application_id)
+    bypass_scoping = str(current_user.role) == "org_admin"
+    application = await service.get_application_by_id(application_id, bypass_tenant_scoping=bypass_scoping)
     
     # SECURITY: Prevent IDOR. Enforce strict ownership boundaries.
     if str(current_user.role) == "applicant" and application.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to view this application.")
-    if str(current_user.role) == "org_admin" and application.organization_id != current_user.organization_id:
-        raise HTTPException(status_code=403, detail="Not authorized to view this application.")
+    if str(current_user.role) == "org_admin":
+        org = await db.get(Organization, current_user.organization_id)
+        allowed_cats = org.allowed_categories if org else []
+        if application.organization_id != current_user.organization_id and application.category not in allowed_cats:
+            raise HTTPException(status_code=403, detail="Not authorized to view this application.")
         
     return application
 
