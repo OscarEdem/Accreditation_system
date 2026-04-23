@@ -83,10 +83,15 @@ class ApplicationService:
         sort_desc: bool = True
     ) -> tuple[list[ApplicationReadWithSubmitter], int]:
         count_stmt = select(func.count(Application.id))
+        
+        Submitter = aliased(User)
+        Reviewer = aliased(User)
+
         stmt = (
-            select(Application, User.first_name, User.last_name)
+            select(Application, Submitter.first_name, Submitter.last_name, Reviewer.first_name, Reviewer.last_name)
             .options(selectinload(Application.documents))
-            .outerjoin(User, Application.user_id == User.id)
+            .outerjoin(Submitter, Application.user_id == Submitter.id)
+            .outerjoin(Reviewer, Application.reviewer_id == Reviewer.id)
         )
         
         if user_id:
