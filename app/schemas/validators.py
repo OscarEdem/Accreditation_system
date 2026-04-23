@@ -14,7 +14,7 @@ def validate_password_strength(password: str) -> str:
     Enforce consistent password requirements across the system.
     
     Requirements:
-also    - 8+ characters
+    - 8+ characters
     - At least one uppercase letter
     - At least one lowercase letter
     - At least one digit
@@ -62,9 +62,9 @@ def validate_name(name: str, field_name: str = "Name") -> str:
     Raises:
         ValueError: If name contains invalid characters
     """
-    # Allow letters, spaces, hyphens, apostrophes, and periods
-    if not re.match(r"^[a-zA-Z\s'\-\.]+$", name):
-        raise ValueError(f"{field_name} can only contain letters, spaces, hyphens, apostrophes, and periods.")
+    # Allow letters, spaces, hyphens, apostrophes, periods, parentheses, and commas
+    if not re.match(r"^[a-zA-Z\s'\-\.\(\),]+$", name):
+        raise ValueError(f"{field_name} can only contain letters, spaces, hyphens, apostrophes, periods, parentheses, and commas.")
     
     # Reject if mostly numbers
     digit_count = sum(c.isdigit() for c in name)
