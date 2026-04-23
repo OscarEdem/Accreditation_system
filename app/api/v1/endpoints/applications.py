@@ -536,7 +536,7 @@ async def review_applications_batch(
             )
     elif review_in.status.lower() == "returned":
         for app in applications:
-            update_link = f"{settings.FRONTEND_URL}/track?ref={app.id}"
+            update_link = f"{settings.FRONTEND_URL}/portal/applications/{app.id}"
             send_email_notification.delay(
                 recipient_email=app.email,
                 template_key="app_returned",
@@ -591,7 +591,7 @@ async def review_application(
             context={"first_name": application.first_name, "category": application.category}
         )
     elif review_in.status.lower() == "returned":
-        update_link = f"{settings.FRONTEND_URL}/track?ref={application.id}"
+        update_link = f"{settings.FRONTEND_URL}/portal/applications/{application.id}"
         send_email_notification.delay(
             recipient_email=application.email,
             template_key="app_returned",
