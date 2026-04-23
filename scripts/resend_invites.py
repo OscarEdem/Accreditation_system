@@ -7,8 +7,10 @@ from app.workers.main import send_email_notification
 
 #  List the emails of the people who missed their invite here:
 EMAILS_TO_RESEND = [
-    "oscarnyanyofio18+10@gmail.com",
-    "famesofunmilayo@gmail.com"
+    "lamine.faty@caaweb.org",
+    "caa@caaweb.org",
+    "ezofat@gmail.com",
+    "caa2026accra@gmail.com",
 ]
 
 async def resend_invites():
