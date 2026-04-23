@@ -1,5 +1,7 @@
 import re
+import html
 from app.services.translations import TranslationService
+from app.config.settings import settings
 
 def generate_html_email(subject: str, text_body: str, lang: str = "en") -> str:
     """
@@ -11,10 +13,21 @@ def generate_html_email(subject: str, text_body: str, lang: str = "en") -> str:
     translations = TranslationService()
     
     urls = re.findall(r'(https?://[^\s]+)', text_body)
-    main_url = urls[0] if urls else None
+    
+    main_url = None
+    if urls:
+        # Prioritize system action links over URLs pasted in admin comments
+        frontend_urls = [url for url in urls if settings.FRONTEND_URL in url]
+        main_url = frontend_urls[0] if frontend_urls else urls[0]
+    
+    # Safely escape HTML to prevent user-generated text (admin comments) from breaking the email layout
+    safe_text_body = html.escape(text_body)
     
     # Convert plain text newlines into HTML line breaks
-    html_content = text_body.replace('\n', '<br>')
+    html_content = safe_text_body.replace('\n', '<br>')
+    
+    # Automatically turn any URLs in the email body into clickable gold hyperlinks
+    html_content = re.sub(r'(https?://[^\s<]+)', r'<a href="\1" style="color: #f0a500; font-weight: 600; word-break: break-all;">\1</a>', html_content)
     
     button_html = ""
     if main_url:
