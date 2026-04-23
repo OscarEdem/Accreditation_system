@@ -9,6 +9,7 @@ from app.services.participant import ParticipantService
 from app.api.deps import get_current_user, RoleChecker
 from app.models.user import User
 from app.models.application import Application
+from app.models.organization import Organization
 
 router = APIRouter()
 
@@ -24,7 +25,10 @@ async def get_participants(
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(10, ge=1, le=500, description="Items per page"),
     tournament_id: uuid.UUID | None = Query(None, description="Filter by tournament ID"),
-    role: str | None = Query(None, description="Filter by role")
+    role: str | None = Query(None, description="Filter by role"),
+    organization_id: uuid.UUID | None = Query(None, description="Filter by organization ID"),
+    category: str | None = Query(None, description="Filter by category"),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Fetch a list of fully approved participants. Use this for the Participants table in the admin dashboard.
@@ -33,20 +37,27 @@ async def get_participants(
     
     # Security: Prevent IDOR on list fetching
     user_id_filter = None
-    org_id_filter = None
+    org_id_filter = organization_id # Default to the requested query filter for Super Admins
+    category_filter = category
     
     if str(current_user.role) == "applicant":
         user_id_filter = current_user.id
     elif str(current_user.role) == "org_admin":
         if not current_user.organization_id:
             raise HTTPException(status_code=403, detail="Org Admin account is not associated with an organization.")
-        org_id_filter = current_user.organization_id
+        org = await db.get(Organization, current_user.organization_id)
+        if org and org.type == "Media":
+            org_id_filter = None
+            category_filter = "Media"
+        else:
+            org_id_filter = current_user.organization_id # Forcibly override to prevent tenant escape
         
     items, total = await service.get_participants(
         tournament_id=tournament_id,
         role=role,
         organization_id=org_id_filter,
         user_id=user_id_filter,
+        category=category_filter,
         skip=skip, 
         limit=limit
     )
@@ -65,7 +76,11 @@ async def get_participant(
     if str(current_user.role) == "applicant" and participant.application.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to view this participant.")
             
-    if str(current_user.role) == "org_admin" and participant.organization_id != current_user.organization_id:
-        raise HTTPException(status_code=403, detail="Not authorized to view this participant.")
+    if str(current_user.role) == "org_admin":
+        org = await db.get(Organization, current_user.organization_id)
+        is_media_admin = org and org.type == "Media"
+        if participant.organization_id != current_user.organization_id:
+            if not (is_media_admin and participant.application.category == "Media"):
+                raise HTTPException(status_code=403, detail="Not authorized to view this participant.")
         
     return participant

@@ -98,10 +98,7 @@ class ApplicationService:
         if category:
             count_stmt = count_stmt.where(Application.category == category)
             stmt = stmt.where(Application.category == category)
-        if organization_id and allowed_categories:
-            count_stmt = count_stmt.where(or_(Application.organization_id == organization_id, Application.category.in_(allowed_categories))).execution_options(ignore_tenant_scoping=True)
-            stmt = stmt.where(or_(Application.organization_id == organization_id, Application.category.in_(allowed_categories))).execution_options(ignore_tenant_scoping=True)
-        elif organization_id:
+        if organization_id:
             count_stmt = count_stmt.where(Application.organization_id == organization_id)
             stmt = stmt.where(Application.organization_id == organization_id)
             

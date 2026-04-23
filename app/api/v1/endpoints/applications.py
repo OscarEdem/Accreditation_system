@@ -378,10 +378,12 @@ async def export_applications_csv(
     if str(current_user.role) == "org_admin":
         if not current_user.organization_id:
             raise HTTPException(status_code=403, detail="Org Admin account is not associated with an organization.")
-        organization_id = current_user.organization_id
-        org = await db.get(Organization, organization_id)
-        if org and org.allowed_categories:
-            allowed_categories = org.allowed_categories
+        org = await db.get(Organization, current_user.organization_id)
+        if org and org.type == "Media":
+            organization_id = None
+            category = "Media"
+        else:
+            organization_id = current_user.organization_id
         
     items, _ = await service.get_applications(
         status=status, category=category, organization_id=organization_id, allowed_categories=allowed_categories, limit=None
@@ -457,10 +459,12 @@ async def get_applications(
         user_id_filter = None
         if not current_user.organization_id:
             raise HTTPException(status_code=403, detail="Org Admin account is not associated with an organization.")
-        organization_id = current_user.organization_id
-        org = await db.get(Organization, organization_id)
-        if org and org.allowed_categories:
-            allowed_categories = org.allowed_categories
+        org = await db.get(Organization, current_user.organization_id)
+        if org and org.type == "Media":
+            organization_id = None
+            category = "Media"
+        else:
+            organization_id = current_user.organization_id
     else:
         user_id_filter = current_user.id
     
@@ -492,9 +496,10 @@ async def get_application(
         raise HTTPException(status_code=403, detail="Not authorized to view this application.")
     if str(current_user.role) == "org_admin":
         org = await db.get(Organization, current_user.organization_id)
-        allowed_cats = org.allowed_categories if org else []
-        if application.organization_id != current_user.organization_id and application.category not in allowed_cats:
-            raise HTTPException(status_code=403, detail="Not authorized to view this application.")
+        is_media_admin = org and org.type == "Media"
+        if application.organization_id != current_user.organization_id:
+            if not (is_media_admin and application.category == "Media"):
+                raise HTTPException(status_code=403, detail="Not authorized to view this application.")
         
     return application
 
@@ -512,10 +517,11 @@ async def review_applications_batch(
         stmt = select(Application).where(Application.id.in_(review_in.application_ids)).execution_options(ignore_tenant_scoping=True)
         apps = (await db.execute(stmt)).scalars().all()
         org = await db.get(Organization, current_user.organization_id)
-        allowed_cats = org.allowed_categories if org else []
+        is_media_admin = org and org.type == "Media"
         for app in apps:
-            if app.organization_id != current_user.organization_id and app.category not in allowed_cats:
-                raise HTTPException(status_code=403, detail="Not authorized to review applications outside your organization or allowed categories.")
+            if app.organization_id != current_user.organization_id:
+                if not (is_media_admin and app.category == "Media"):
+                    raise HTTPException(status_code=403, detail="Not authorized to review applications outside your organization.")
                 
     applications = await service.review_applications_batch(current_user.id, review_in, bypass_tenant_scoping=bypass_scoping)
     
@@ -565,9 +571,10 @@ async def review_application(
         bypass_scoping = True
         app_to_review = await service.get_application_by_id(application_id, bypass_tenant_scoping=True)
         org = await db.get(Organization, current_user.organization_id)
-        allowed_cats = org.allowed_categories if org else []
-        if app_to_review.organization_id != current_user.organization_id and app_to_review.category not in allowed_cats:
-            raise HTTPException(status_code=403, detail="Not authorized to review applications outside your organization or allowed categories.")
+        is_media_admin = org and org.type == "Media"
+        if app_to_review.organization_id != current_user.organization_id:
+            if not (is_media_admin and app_to_review.category == "Media"):
+                raise HTTPException(status_code=403, detail="Not authorized to review applications outside your organization.")
 
     application = await service.review_application(application_id, current_user.id, review_in, bypass_tenant_scoping=bypass_scoping)
     
@@ -618,9 +625,10 @@ async def review_document(
         if row:
             org_id, category = row
             org = await db.get(Organization, current_user.organization_id)
-            allowed_cats = org.allowed_categories if org else []
-            if org_id != current_user.organization_id and category not in allowed_cats:
-                raise HTTPException(status_code=403, detail="Not authorized to review documents outside your organization or allowed categories.")
+            is_media_admin = org and org.type == "Media"
+            if org_id != current_user.organization_id:
+                if not (is_media_admin and category == "Media"):
+                    raise HTTPException(status_code=403, detail="Not authorized to review documents outside your organization.")
 
     bypass_scoping = str(current_user.role) == "org_admin"
     document = await service.review_document(document_id, current_user.id, review_in, bypass_tenant_scoping=bypass_scoping)

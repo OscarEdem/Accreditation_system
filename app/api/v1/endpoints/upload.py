@@ -1,4 +1,5 @@
 import logging
+import re
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from app.services.s3 import create_presigned_upload_url, verify_s3_file
@@ -77,6 +78,11 @@ async def confirm_upload(
     1. The file exists in S3
     2. The file's content matches the expected MIME type (prevents polyglot attacks)
     """
+    # SECURITY CHECK: Prevent Arbitrary File Deletion & Path Traversal
+    key_pattern = r"^uploads/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\.(jpg|jpeg|png|webp|pdf)$"
+    if not re.match(key_pattern, request.file_key):
+        raise HTTPException(status_code=400, detail="Invalid file key format. Key must be a valid system-generated UUID.")
+
     import boto3
     import magic
     from app.config.settings import settings

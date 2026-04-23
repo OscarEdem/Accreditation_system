@@ -17,15 +17,27 @@ class ParticipantService:
         role: str | None = None,
         organization_id: uuid.UUID | None = None,
         user_id: uuid.UUID | None = None,
+        category: str | None = None,
         skip: int = 0, 
         limit: int = 100
     ) -> tuple[list[Participant], int]:
         count_stmt = select(func.count(Participant.id))
         stmt = select(Participant).options(selectinload(Participant.application).selectinload(Application.documents))
         
+        joined_app = False
         if user_id:
             count_stmt = count_stmt.join(Application, Participant.application_id == Application.id).where(Application.user_id == user_id)
             stmt = stmt.join(Application, Participant.application_id == Application.id).where(Application.user_id == user_id)
+            joined_app = True
+            
+        if category:
+            if not joined_app:
+                count_stmt = count_stmt.join(Application, Participant.application_id == Application.id)
+                stmt = stmt.join(Application, Participant.application_id == Application.id)
+                joined_app = True
+            count_stmt = count_stmt.where(Application.category == category)
+            stmt = stmt.where(Application.category == category)
+            
         if organization_id:
             count_stmt = count_stmt.where(Participant.organization_id == organization_id)
             stmt = stmt.where(Participant.organization_id == organization_id)
