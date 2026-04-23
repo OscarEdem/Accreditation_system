@@ -401,7 +401,7 @@ async def export_applications_csv(
             "category", "outlet_name", "media_accreditation_type",
             "photo_url", "dob", "gender", "country",
             "sporting_disciplines", "status", "submitted_at", "reviewer_id",
-            "reviewer_comments", "submitter_name", "document_urls"
+            "reviewer_name", "reviewer_comments", "submitter_name", "document_urls"
         ]
         writer.writerow(headers)
         for item in items:
@@ -554,7 +554,11 @@ async def review_applications_batch(
                 recipient_email=app.email,
                 template_key="app_rejected",
                 language=app.preferred_language or 'en',
-                context={"first_name": app.first_name, "rejection_reason": review_in.reviewer_comments or "Your application has been rejected."}
+                context={
+                    "first_name": app.first_name,
+                    "application_id": str(app.id),
+                    "rejection_reason": review_in.reviewer_comments or "Your application has been rejected."
+                }
             )
     return applications
 
@@ -604,7 +608,11 @@ async def review_application(
             recipient_email=application.email,
             template_key="app_rejected",
             language=application.preferred_language or 'en',
-            context={"first_name": application.first_name, "rejection_reason": review_in.reviewer_comments or "Your application has been rejected."}
+            context={
+                "first_name": application.first_name,
+                "application_id": str(application.id),
+                "rejection_reason": review_in.reviewer_comments or "Your application has been rejected."
+            }
         )
 
             
@@ -642,6 +650,7 @@ async def review_document(
                 language=application.preferred_language or 'en',
                 context={
                     "first_name": application.first_name,
+                    "application_id": str(application.id),
                     "document_type": document.document_type.upper(),
                     "rejection_reason": review_in.rejection_reason
                 }

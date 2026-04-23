@@ -99,6 +99,9 @@ class ApplicationRead(ApplicationBase):
     submitted_at: datetime
     created_at: datetime
     documents: List[DocumentRead] = []
+    reviewer_comments: Optional[str] = None
+    reviewer_id: Optional[uuid.UUID] = None
+    reviewer_name: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 

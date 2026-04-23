@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, aliased
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
 from app.models.application import Application
@@ -116,18 +116,22 @@ class ApplicationService:
         result = await self.session.execute(stmt)
         
         applications = []
-        for app_model, first_name, last_name in result.all():
+        for app_model, s_first, s_last, r_first, r_last in result.all():
             # Use Pydantic model for robust serialization, including relationships
             app_read = ApplicationRead.model_validate(app_model)
             
-            if first_name and last_name:
-                submitter_name = f"{first_name} {last_name}"
+            if s_first and s_last:
+                submitter_name = f"{s_first} {s_last}"
             else:
                 submitter_name = f"{app_model.first_name} {app_model.last_name} (Self)"
+                
+            reviewer_name = f"{r_first} {r_last}" if r_first and r_last else None
+            app_dump = app_read.model_dump()
+            app_dump["reviewer_name"] = reviewer_name
             
             # Create the final response model
             applications.append(
-                ApplicationReadWithSubmitter(**app_read.model_dump(), submitter_name=submitter_name)
+                ApplicationReadWithSubmitter(**app_dump, submitter_name=submitter_name)
             )
         return applications, total
 
@@ -184,6 +188,7 @@ class ApplicationService:
                 Application.last_name,
                 Application.status,
                 Application.category,
+                Application.reviewer_comments,
                 Badge.status.label("badge_status")
             )
             .outerjoin(Participant, Participant.application_id == Application.id)
@@ -207,7 +212,15 @@ class ApplicationService:
             raise HTTPException(status_code=404, detail="Application not found. Please check your details.")
             
         # Return a safe dictionary mapping to the ApplicationTrackResponse schema
-        return {"reference_number": row.id, "first_name": row.first_name, "last_name": row.last_name, "status": row.status, "category": row.category, "badge_status": row.badge_status or "Pending Generation"}
+        return {
+            "reference_number": row.id, 
+            "first_name": row.first_name, 
+            "last_name": row.last_name, 
+            "status": row.status, 
+            "category": row.category, 
+            "badge_status": row.badge_status or "Pending Generation",
+            "reviewer_comments": row.reviewer_comments
+        }
 
     async def _create_participant_from_application(self, application: Application, assigned_role: str | None):
         """Private helper to create a Participant if one doesn't already exist for the application."""
