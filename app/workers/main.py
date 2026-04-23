@@ -128,6 +128,10 @@ async def _is_country_team_org_admin(email: str) -> bool:
 @celery_app.task(name="send_email_notification", bind=True, max_retries=3)
 def send_email_notification(self, recipient_email: str, subject: str = None, body: str = None, template_key: str = None, language: str = "en", context: dict = None, cc_emails: list = None):
     """Background task to send email notifications to users using SendGrid."""
+    if not recipient_email:
+        logger.error("Cannot send email: recipient_email is empty.")
+        return {"status": "failed", "reason": "empty recipient"}
+
     if template_key:
         translations = TranslationService()
         ctx = context or {}
@@ -182,8 +186,19 @@ def send_email_notification(self, recipient_email: str, subject: str = None, bod
         logger.info(f"Successfully sent SendGrid email to {recipient_email}. Status Code: {response.status_code}")
         return {"status": "success", "recipient": recipient_email, "status_code": response.status_code}
     except Exception as exc:
-        logger.error(f"Failed to send email to {recipient_email} via SendGrid: {exc}")
-        # Retry the task in 60 seconds in case of transient network issues
+        error_details = str(exc)
+        # Extract exact SendGrid JSON error (e.g., "invalid email address")
+        if hasattr(exc, 'body'):
+            error_details = f"{exc} - Details: {exc.body}"
+            
+        logger.error(f"Failed to send email to {recipient_email} via SendGrid: {error_details}")
+        
+        # Do not retry on 4xx Client Errors (e.g., Invalid Email Format) because they will never succeed
+        if hasattr(exc, 'status_code') and str(exc.status_code).startswith('4'):
+            logger.warning(f"Dropping email task to {recipient_email}: Client error {exc.status_code} cannot be retried.")
+            return {"status": "failed", "reason": error_details}
+            
+        # Retry the task in 60 seconds in case of transient network/server issues (5xx)
         raise self.retry(exc=exc, countdown=60)
 
 @celery_app.task(name="scrub_gdpr_data", bind=True)

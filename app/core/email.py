@@ -143,13 +143,13 @@ def generate_html_email(subject: str, text_body: str, lang: str = "en") -> str:
 </html>
 """
     
-    html = template.replace("___HTML_CONTENT___", html_content)
-    html = html.replace("___BUTTON_HTML___", button_html)
-    html = html.replace("___SUBJECT___", subject)
+    final_html = template.replace("___HTML_CONTENT___", html_content)
+    final_html = final_html.replace("___BUTTON_HTML___", button_html)
+    final_html = final_html.replace("___SUBJECT___", subject)
     
-    html = html.replace("___HELP_TITLE___", translations.get_string('email_need_help_title', lang))
-    html = html.replace("___IGNORE_TEXT___", translations.get_string('email_ignore_if_not_you', lang))
-    html = html.replace("___CONTACT_INTRO___", translations.get_string('email_contact_support_intro', lang))
-    html = html.replace("___FOOTER_NOTICE___", translations.get_string('email_footer_notice', lang))
+    final_html = final_html.replace("___HELP_TITLE___", translations.get_string('email_need_help_title', lang))
+    final_html = final_html.replace("___IGNORE_TEXT___", translations.get_string('email_ignore_if_not_you', lang))
+    final_html = final_html.replace("___CONTACT_INTRO___", translations.get_string('email_contact_support_intro', lang))
+    final_html = final_html.replace("___FOOTER_NOTICE___", translations.get_string('email_footer_notice', lang))
     
-    return html
+    return final_html
