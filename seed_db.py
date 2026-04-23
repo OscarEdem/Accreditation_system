@@ -38,8 +38,28 @@ async def seed_database():
             "Service Staff": "Service Staff", "VIP/Guest": "VIP/Guest",
             "Confederation of African Athletics": "African Federation", "World Athletics": "World Federation"
         })
-        orgs_data = [{"name": name, "type": org_types.get(name, "Generic")} for name in SEEDED_ORGANIZATIONS]
         
+        orgs_data = []
+        for name in SEEDED_ORGANIZATIONS:
+            o_type = org_types.get(name, "Generic")
+            allowed = []
+            if o_type == "Country Team":
+                allowed = ["Athlete", "Team Officials", "Coaches", "Medical Staff", "VIP/Guests"]
+            elif o_type == "Media":
+                allowed = ["Media"]
+            elif o_type == "Volunteer":
+                allowed = ["Volunteer"]
+            elif o_type == "LOC":
+                allowed = ["LOC Staff"]
+            elif o_type == "Service Staff":
+                allowed = ["Service Staff"]
+            elif o_type == "Technical Official":
+                allowed = ["Technical Officials"]
+            elif o_type == "VIP/Guest":
+                allowed = ["VIP/Guests"]
+                
+            orgs_data.append({"name": name, "type": o_type, "allowed_categories": allowed})
+            
         print(f"Seeding {len(orgs_data)} organizations...")
         result = await session.execute(select(Organization.name))
         existing_orgs = set(result.scalars().all())

@@ -4,18 +4,7 @@ import asyncio
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
 from app.config.settings import settings
-
-# Map the CSV headers to the exact Category enums expected by your database
-CATEGORY_MAP = {
-    "Athletes": "Athlete",  # Maps the lowercase 'athletes' header from the CSV
-    "Team Officials": "Team Officials",
-    "Technical Officials": "Technical Officials",
-    "LOC Staff": "LOC Staff",
-    "Volunteers": "Volunteer",
-    "Media": "Media",
-    "VIP/Guests": "VIP/Guests",
-    "Service Staff": "Service Staff"
-}
+from app.schemas.application import ApplicationCategory
 
 async def seed_organizations():
     print(f"Connecting to database: {settings.DATABASE_URL.split('@')[-1]}")
@@ -36,7 +25,8 @@ async def seed_organizations():
                     
             # 1. Auto-seed missing categories to prevent dropdown missing items
             print("Ensuring all required categories exist in the database...")
-            for cat_name in set(CATEGORY_MAP.values()):
+            for cat in ApplicationCategory:
+                cat_name = cat.value
                 check_cat = text("SELECT id FROM categories WHERE name = :name LIMIT 1")
                 if not (await conn.execute(check_cat, {"name": cat_name})).fetchone():
                     insert_cat = text("INSERT INTO categories (id, name, created_at) VALUES (gen_random_uuid(), :name, NOW())")
@@ -50,36 +40,54 @@ async def seed_organizations():
                 reader.fieldnames = [field.strip() for field in reader.fieldnames if field]
             
             for row in reader:
-                    # Normalize spaces: trim edges and replace multiple internal spaces with a single space
-                    org_name = re.sub(r'\s+', ' ', row["Organisation"].strip())
-                    org_type = row["Category"].strip()
+                # Normalize spaces: trim edges and replace multiple internal spaces with a single space
+                org_name = re.sub(r'\s+', ' ', row["Organisation"].strip())
+                org_type = row.get("Category", "Generic").strip()
+                
+                # Fuzzy matching: Safely capture TRUE, 1, YES, or Y using keyword detection in the headers
+                allowed_categories = []
+                for key, val in row.items():
+                    if not key or not val:
+                        continue
+                    key_upper = key.strip().upper()
+                    val_upper = str(val).strip().upper()
                     
-                    # Build the array of allowed categories based on TRUE values
-                    allowed_categories = [
-                        db_cat for csv_col, db_cat in CATEGORY_MAP.items()
-                        if row.get(csv_col, "").strip().upper() == "TRUE"
-                    ]
-                    
-                    # Check if organization already exists since 'name' lacks a UNIQUE constraint
-                    check_query = text("SELECT id FROM organizations WHERE name = :name LIMIT 1")
-                    result = await conn.execute(check_query, {"name": org_name})
-                    existing_org = result.fetchone()
-                    
-                    if existing_org:
-                        # Update existing organization
-                        update_query = text("""
-                            UPDATE organizations 
-                            SET type = :type, allowed_categories = :allowed_categories 
-                            WHERE id = :id
-                        """)
-                        await conn.execute(update_query, {"type": org_type, "allowed_categories": allowed_categories, "id": existing_org[0]})
-                    else:
-                        # Insert new organization
-                        insert_query = text("""
-                            INSERT INTO organizations (id, name, type, allowed_categories)
-                            VALUES (gen_random_uuid(), :name, :type, :allowed_categories)
-                        """)
-                        await conn.execute(insert_query, {"name": org_name, "type": org_type, "allowed_categories": allowed_categories})
+                    if val_upper in ["TRUE", "1", "YES", "Y", "X"]:
+                        if "ATHLETE" in key_upper: allowed_categories.append(ApplicationCategory.athlete.value)
+                        elif "TEAM OFFICIAL" in key_upper: allowed_categories.append(ApplicationCategory.team_officials.value)
+                        elif "COACH" in key_upper: allowed_categories.append(ApplicationCategory.coaches.value)
+                        elif "MEDICAL" in key_upper: allowed_categories.append(ApplicationCategory.medical_staff.value)
+                        elif "TECHNICAL" in key_upper: allowed_categories.append(ApplicationCategory.technical_officials.value)
+                        elif "LOC" in key_upper: allowed_categories.append(ApplicationCategory.loc_staff.value)
+                        elif "VOLUNTEER" in key_upper: allowed_categories.append(ApplicationCategory.volunteer.value)
+                        elif "MEDIA" in key_upper: allowed_categories.append(ApplicationCategory.media.value)
+                        elif "VIP" in key_upper: allowed_categories.append(ApplicationCategory.vip_guests.value)
+                        elif "SERVICE" in key_upper: allowed_categories.append(ApplicationCategory.service_staff.value)
+                        
+                # Remove any accidental duplicates
+                allowed_categories = list(set(allowed_categories))
+                
+                # Use ILIKE to match "Team Ghana" in the DB even if the CSV just says "Ghana"
+                search_name = f"%{org_name}%"
+                check_query = text("SELECT id FROM organizations WHERE name ILIKE :name LIMIT 1")
+                result = await conn.execute(check_query, {"name": search_name})
+                existing_org = result.fetchone()
+                
+                if existing_org:
+                    # Update existing organization (Safely cast array for PostgreSQL)
+                    update_query = text("""
+                        UPDATE organizations 
+                        SET type = :type, allowed_categories = CAST(:allowed_categories AS VARCHAR[]) 
+                        WHERE id = :id
+                    """)
+                    await conn.execute(update_query, {"type": org_type, "allowed_categories": allowed_categories, "id": existing_org[0]})
+                else:
+                    # Insert new organization
+                    insert_query = text("""
+                        INSERT INTO organizations (id, name, type, allowed_categories)
+                        VALUES (gen_random_uuid(), :name, :type, CAST(:allowed_categories AS VARCHAR[]))
+                    """)
+                    await conn.execute(insert_query, {"name": org_name, "type": org_type, "allowed_categories": allowed_categories})
         print("Successfully seeded all organizations and their allowed categories from the CSV!")
     except Exception as e:
         print(f"Failed to seed database: {e}")
