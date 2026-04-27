@@ -116,41 +116,45 @@ async def generate_badge(
     service = BadgeService(db)
     
     try:
-        badge = await service.create_badge(participant_id)
-    except ValueError:
-        # Idempotent behavior: If badge already exists, just fetch it instead of failing
-        stmt = select(Badge).where(Badge.participant_id == participant_id)
-        badge = (await db.execute(stmt)).scalar_one_or_none()
-        if not badge:
-            raise HTTPException(status_code=500, detail="Badge generation failed internally.")
+        try:
+            badge = await service.create_badge(participant_id)
+        except ValueError:
+            # Idempotent behavior: If badge already exists, just fetch it instead of failing
+            stmt = select(Badge).where(Badge.participant_id == participant_id)
+            badge = (await db.execute(stmt)).scalar_one_or_none()
+            if not badge:
+                raise HTTPException(status_code=500, detail="Badge generation failed internally (not found after rollback).")
+            
+        qr_base64 = service.generate_qr_code(badge)
         
-    qr_base64 = service.generate_qr_code(badge)
-    
-    # Fetch the participant's email and first name from the linked Application
-    stmt = (
-        select(Application.first_name, Application.email, Application.preferred_language)
-        .select_from(Participant)
-        .join(Application, Participant.application_id == Application.id)
-        .where(Participant.id == participant_id)
-    )
-    row = (await db.execute(stmt)).first()
-    if row:
-        first_name, email, language = row
-        download_link = f"{settings.FRONTEND_URL}/badges/download/{participant_id}"
-        # Only send email if the badge was newly generated (optional, but good practice)
-        # We can just send it anyway as a resend, or we can assume if they hit POST it's fine.
-        send_email_notification.delay(
-            recipient_email=email,
-            template_key="badge_ready",
-            language=language or 'en',
-            context={"first_name": first_name, "download_link": download_link}
+        # Fetch the participant's email and first name from the linked Application
+        stmt = (
+            select(Application.first_name, Application.email, Application.preferred_language)
+            .select_from(Participant)
+            .join(Application, Participant.application_id == Application.id)
+            .where(Participant.id == participant_id)
         )
-    
-    return {
-        "badge_id": badge.id,
-        "serial_number": badge.serial_number,
-        "qr_image_base64": f"data:image/png;base64,{qr_base64}"
-    }
+        row = (await db.execute(stmt)).first()
+        if row:
+            first_name, email, language = row
+            download_link = f"{settings.FRONTEND_URL}/badges/download/{participant_id}"
+            # Only send email if the badge was newly generated (optional, but good practice)
+            # We can just send it anyway as a resend, or we can assume if they hit POST it's fine.
+            send_email_notification.delay(
+                recipient_email=email,
+                template_key="badge_ready",
+                language=language or 'en',
+                context={"first_name": first_name, "download_link": download_link}
+            )
+        
+        return {
+            "badge_id": badge.id,
+            "serial_number": badge.serial_number,
+            "qr_image_base64": f"data:image/png;base64,{qr_base64}"
+        }
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=500, detail=f"Internal Error: {str(e)} | Trace: {traceback.format_exc()}")
 
 @router.patch("/{badge_id}/status", response_model=BadgeRead, status_code=200, summary="Update Badge Status (Revoke)")
 async def update_badge_status(
