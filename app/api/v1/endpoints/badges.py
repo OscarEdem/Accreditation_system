@@ -15,6 +15,8 @@ from app.models.participant import Participant
 from app.models.application import Application
 from app.models.badge import Badge
 from app.models.audit_log import AuditLog
+from app.models.zone import Zone
+from app.models.zone_access import ZoneAccess
 from app.workers.main import send_email_notification
 from app.config.settings import settings
 
@@ -177,6 +179,8 @@ async def get_badge_data(
 ):
     """
     Returns all the raw data required for the frontend to render the PDF badge directly in the browser.
+    Includes the full application fields, allowed access zones (with zone name, code, and color),
+    and the base64-encoded QR code image.
     """
     stmt = (
         select(Participant, Application.user_id, Application.organization_id)
@@ -203,26 +207,111 @@ async def get_badge_data(
     if not badge:
         raise HTTPException(status_code=404, detail="Badge not found. Please generate the badge first.")
 
-    # 2. Fetch User details
+    # 2. Fetch full application + user details
     stmt = (
-        select(User.first_name, User.last_name, Application.category, Application.photo_url, Application.country, Participant.role)
+        select(
+            Application.tournament_id,
+            Application.user_id,
+            Application.first_name,
+            Application.last_name,
+            Application.email,
+            Application.phone_number,
+            Application.passport_number,
+            Application.specific_role,
+            Application.emergency_contact_name,
+            Application.emergency_contact_phone,
+            Application.special_requirements,
+            Application.organization_id,
+            Application.category,
+            Application.outlet_name,
+            Application.media_accreditation_type,
+            Application.photo_url,
+            Application.dob,
+            Application.gender,
+            Application.country,
+            Application.preferred_language,
+            Application.sporting_disciplines,
+            Application.status,
+            Application.submitted_at,
+            Application.created_at,
+            Application.reviewer_comments,
+            Application.reviewer_id,
+            Participant.role.label("specific_participant_role"),
+            Participant.id.label("participant_id")
+        )
         .select_from(Participant)
         .join(Application, Participant.application_id == Application.id)
-        .join(User, Application.user_id == User.id)
         .where(Participant.id == participant.id)
     )
-    row = (await db.execute(stmt)).first()
-    first_name, last_name, category, photo_url, country, role = row
-    
+    app_row = (await db.execute(stmt)).first()
+    if not app_row:
+        raise HTTPException(status_code=404, detail="Application data not found for this participant.")
+
+    # 3. Resolve allowed zones via the participant's category
+    #    category_id on the Participant links to the Category table; 
+    #    ZoneAccess maps (zone_id, category_id) pairs.
+    zones_allowed = []
+    if participant.category_id:
+        zone_stmt = (
+            select(Zone.id, Zone.name, Zone.code, Zone.color, Zone.description, Zone.require_qr_scan)
+            .join(ZoneAccess, ZoneAccess.zone_id == Zone.id)
+            .where(
+                ZoneAccess.category_id == participant.category_id,
+                Zone.is_active == True
+            )
+        )
+        zone_rows = (await db.execute(zone_stmt)).all()
+        zones_allowed = [
+            {
+                "id": str(z.id),
+                "name": z.name,
+                "code": z.code,
+                "color": z.color,
+                "description": z.description,
+                "require_qr_scan": z.require_qr_scan
+            }
+            for z in zone_rows
+        ]
+
+    # 4. Generate QR code
     service = BadgeService(db)
     qr_base64 = service.generate_qr_code(badge)
-    
+
     return {
-        "participant_name": f"{first_name} {last_name}",
-        "role": role,
-        "category": category,
-        "country": country,
-        "photo_url": photo_url,
+        # --- Full Application Fields ---
+        "tournament_id": app_row.tournament_id,
+        "user_id": app_row.user_id,
+        "first_name": app_row.first_name,
+        "last_name": app_row.last_name,
+        "email": app_row.email,
+        "phone_number": app_row.phone_number,
+        "passport_number": app_row.passport_number,
+        "specific_role": app_row.specific_role,
+        "emergency_contact_name": app_row.emergency_contact_name,
+        "emergency_contact_phone": app_row.emergency_contact_phone,
+        "special_requirements": app_row.special_requirements,
+        "organization_id": app_row.organization_id,
+        "category": app_row.category,
+        "outlet_name": app_row.outlet_name,
+        "media_accreditation_type": app_row.media_accreditation_type,
+        "photo_url": app_row.photo_url,
+        "dob": str(app_row.dob) if app_row.dob else None,
+        "gender": app_row.gender,
+        "country": app_row.country,
+        "preferred_language": app_row.preferred_language,
+        "sporting_disciplines": app_row.sporting_disciplines or [],
+        "id": str(participant.id),
+        "status": app_row.status,
+        "submitted_at": app_row.submitted_at,
+        "created_at": app_row.created_at,
+        "reviewer_comments": app_row.reviewer_comments,
+        "reviewer_id": app_row.reviewer_id,
+        # --- Badge-Specific Fields ---
+        "badge_id": str(badge.id),
         "serial_number": badge.serial_number,
+        "participant_role": app_row.specific_participant_role,
+        # --- Zone Access ---
+        "zones_allowed": zones_allowed,
+        # --- QR Code ---
         "qr_image_base64": f"data:image/png;base64,{qr_base64}"
     }
