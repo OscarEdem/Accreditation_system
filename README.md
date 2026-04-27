@@ -3,6 +3,7 @@
 ## Overview
 The Accreditation Management System (AMS) is a secure, scalable, and real-time platform for managing the full lifecycle of accreditation for the ACCRA 2026 tournament. It handles participant onboarding, multi-step application approvals, cryptographic badge generation, and high-speed venue access control via QR scanning.
 
+
 ## Features
 - **Role-Based Access Control (RBAC):** Strict roles for Super Admin, LOC Admin, Accreditation Officer, Organization Admin, Scanner Operator, and Applicant.
 - **Participant Onboarding:** Registration, application submission, and document uploads with dynamic category filtering.
