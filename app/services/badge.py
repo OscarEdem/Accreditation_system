@@ -28,25 +28,37 @@ class BadgeService:
 
     async def create_badge(self, participant_id: uuid.UUID) -> Badge:
         """Creates a new badge for a participant with an HMAC signature."""
+        from datetime import datetime, timezone as tz
+        import logging
+        logger = logging.getLogger(__name__)
+
         serial_number = f"ACCRA-{uuid.uuid4().hex[:8].upper()}"
+        # Explicitly set created_at so it is never None before flush
+        now = datetime.now(tz.utc).replace(tzinfo=None)
+        issued_at = int(now.replace(tzinfo=tz.utc).timestamp())
+        qr_hmac = self.generate_signature(str(participant_id), serial_number, issued_at)
 
         badge = Badge(
             participant_id=participant_id,
             serial_number=serial_number,
-            status="active"
+            qr_hmac=qr_hmac,
+            status="active",
+            created_at=now
         )
         
         try:
             self.session.add(badge)
-            await self.session.flush()
-            issued_at = int(badge.created_at.replace(tzinfo=timezone.utc).timestamp())
-            badge.qr_hmac = self.generate_signature(str(participant_id), serial_number, issued_at)
             await self.session.commit()
             await self.session.refresh(badge)
             return badge
-        except IntegrityError:
+        except IntegrityError as e:
             await self.session.rollback()
+            logger.warning(f"Badge IntegrityError for participant {participant_id}: {e}")
             raise ValueError("A badge already exists for this participant.")
+        except Exception as e:
+            await self.session.rollback()
+            logger.error(f"Badge creation failed for participant {participant_id}: {e}")
+            raise
 
     async def create_badges_batch(self, participant_ids: list[uuid.UUID]) -> list[Badge]:
         """Creates multiple badges in a single transaction."""
