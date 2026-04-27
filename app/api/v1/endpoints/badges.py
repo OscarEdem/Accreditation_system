@@ -229,10 +229,7 @@ async def get_badge_data(
         zone_stmt = (
             select(Zone.id, Zone.name, Zone.code, Zone.color, Zone.description, Zone.require_qr_scan)
             .join(ZoneAccess, ZoneAccess.zone_id == Zone.id)
-            .where(
-                ZoneAccess.category_id == participant.category_id,
-                Zone.is_active == True
-            )
+            .where(ZoneAccess.category_id == participant.category_id)
         )
         zone_rows = (await db.execute(zone_stmt)).all()
         zones_allowed = [
