@@ -28,63 +28,8 @@ allow_badge_revoke_roles = RoleChecker(["admin", "officer"])
 class BatchBadgeRequest(BaseModel):
     participant_ids: List[uuid.UUID]
 
-@router.post("/{reference_id}", status_code=201, summary="Generate Badge (Single)", dependencies=[Depends(RateLimiter(requests=30, window=60))])
-async def generate_badge(
-    reference_id: uuid.UUID,
-    current_user: Annotated[User, Depends(allow_badge_generate_roles)],
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Generates the cryptographic signature, QR code, and assigns a Serial Number to an approved participant.
-    (Note: `reference_id` can be either the Participant ID or the original Application ID).
-    Automatically triggers an email to the user with a download link.
-    """
-
-    # Resolve ID: Frontend might pass an Application ID instead of a Participant ID
-    stmt = select(Participant).where((Participant.id == reference_id) | (Participant.application_id == reference_id))
-    participant = (await db.execute(stmt)).scalars().first()
-    if not participant:
-        raise HTTPException(status_code=404, detail="Participant not found. Ensure the application is approved.")
-        
-    # SECURITY CHECK: org_admin can only generate badges for their own team
-    if str(current_user.role) == "org_admin" and participant.organization_id != current_user.organization_id:
-        raise HTTPException(status_code=403, detail="Not authorized to generate badges for participants outside your organization.")
-
-    participant_id = participant.id
-
-    service = BadgeService(db)
-    
-    try:
-        badge = await service.create_badge(participant_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-        
-    qr_base64 = service.generate_qr_code(badge)
-    
-    # Fetch the participant's email and first name from the linked Application
-    stmt = (
-        select(Application.first_name, Application.email, Application.preferred_language)
-        .select_from(Participant)
-        .join(Application, Participant.application_id == Application.id)
-        .where(Participant.id == participant_id)
-    )
-    row = (await db.execute(stmt)).first()
-    if row:
-        first_name, email, language = row
-        download_link = f"{settings.FRONTEND_URL}/badges/download/{participant_id}"
-        send_email_notification.delay(
-            recipient_email=email,
-            template_key="badge_ready",
-            language=language or 'en',
-            context={"first_name": first_name, "download_link": download_link}
-        )
-    
-    return {
-        "badge_id": badge.id,
-        "serial_number": badge.serial_number,
-        "qr_image_base64": f"data:image/png;base64,{qr_base64}"
-    }
-
+# ⚠️ IMPORTANT: /batch/generate MUST be defined BEFORE /{reference_id}
+# to prevent FastAPI matching "batch" as a UUID reference_id.
 @router.post("/batch/generate", status_code=201, summary="Generate Badges (Bulk)", dependencies=[Depends(RateLimiter(requests=10, window=60))])
 async def generate_badges_batch(
     request: BatchBadgeRequest,
@@ -143,6 +88,63 @@ async def generate_badges_batch(
             "qr_image_base64": f"data:image/png;base64,{raw_base64}"
         })
     return result
+
+@router.post("/{reference_id}", status_code=201, summary="Generate Badge (Single)", dependencies=[Depends(RateLimiter(requests=30, window=60))])
+async def generate_badge(
+    reference_id: uuid.UUID,
+    current_user: Annotated[User, Depends(allow_badge_generate_roles)],
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Generates the cryptographic signature, QR code, and assigns a Serial Number to an approved participant.
+    (Note: `reference_id` can be either the Participant ID or the original Application ID).
+    Automatically triggers an email to the user with a download link.
+    """
+
+    # Resolve ID: Frontend might pass an Application ID instead of a Participant ID
+    stmt = select(Participant).where((Participant.id == reference_id) | (Participant.application_id == reference_id))
+    participant = (await db.execute(stmt)).scalars().first()
+    if not participant:
+        raise HTTPException(status_code=404, detail="Participant not found. Ensure the application is approved.")
+        
+    # SECURITY CHECK: org_admin can only generate badges for their own team
+    if str(current_user.role) == "org_admin" and participant.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Not authorized to generate badges for participants outside your organization.")
+
+    participant_id = participant.id
+
+    service = BadgeService(db)
+    
+    try:
+        badge = await service.create_badge(participant_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+        
+    qr_base64 = service.generate_qr_code(badge)
+    
+    # Fetch the participant's email and first name from the linked Application
+    stmt = (
+        select(Application.first_name, Application.email, Application.preferred_language)
+        .select_from(Participant)
+        .join(Application, Participant.application_id == Application.id)
+        .where(Participant.id == participant_id)
+    )
+    row = (await db.execute(stmt)).first()
+    if row:
+        first_name, email, language = row
+        download_link = f"{settings.FRONTEND_URL}/badges/download/{participant_id}"
+        send_email_notification.delay(
+            recipient_email=email,
+            template_key="badge_ready",
+            language=language or 'en',
+            context={"first_name": first_name, "download_link": download_link}
+        )
+    
+    return {
+        "badge_id": badge.id,
+        "serial_number": badge.serial_number,
+        "qr_image_base64": f"data:image/png;base64,{qr_base64}"
+    }
 
 @router.patch("/{badge_id}/status", response_model=BadgeRead, status_code=200, summary="Update Badge Status (Revoke)")
 async def update_badge_status(
