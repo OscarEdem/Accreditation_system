@@ -17,6 +17,7 @@ from app.models.badge import Badge
 from app.models.audit_log import AuditLog
 from app.models.zone import Zone
 from app.models.zone_access import ZoneAccess
+from app.models.category import Category
 from app.workers.main import send_email_notification
 from app.config.settings import settings
 
@@ -224,12 +225,19 @@ async def get_badge_data(
         raise HTTPException(status_code=404, detail="Badge not found. Please generate the badge first.")
 
     # 2. Resolve allowed zones via the participant's category
+    #    participant.category_id is often NULL (not set during approval flow),
+    #    so we fall back to looking up the Category by name from application.category.
     zones_allowed = []
-    if participant.category_id:
+    category_id = participant.category_id
+    if not category_id and application.category:
+        cat_stmt = select(Category.id).where(Category.name == application.category)
+        category_id = (await db.execute(cat_stmt)).scalar_one_or_none()
+
+    if category_id:
         zone_stmt = (
             select(Zone.id, Zone.name, Zone.code, Zone.color, Zone.description, Zone.require_qr_scan)
             .join(ZoneAccess, ZoneAccess.zone_id == Zone.id)
-            .where(ZoneAccess.category_id == participant.category_id)
+            .where(ZoneAccess.category_id == category_id)
         )
         zone_rows = (await db.execute(zone_stmt)).all()
         zones_allowed = [
